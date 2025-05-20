@@ -9,3 +9,14 @@ pub struct Example {
     pub created_at: DateTime,
     pub updated_at: DateTime,
 }
+
+impl Default for Example {
+    fn default() -> Self {
+        Self {
+            id: ObjectId::new(),
+            name: "example".to_string(),
+            created_at: DateTime::now(),
+            updated_at: DateTime::now(),
+        }
+    }
+}

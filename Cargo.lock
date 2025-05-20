@@ -796,6 +796,7 @@ dependencies = [
  "opentelemetry-gcloud-trace",
  "opentelemetry-semantic-conventions",
  "opentelemetry_sdk 0.29.0",
+ "rand 0.9.1",
  "redis",
  "serde",
  "serde_json",

@@ -21,7 +21,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let envs = crate::envs::get();
     let tracer = tools::init_tracer(envs.service_name.clone()).await;
     if tracer.is_ok() {
-        tools::init_logger(tracer.unwrap());
+        tools::init_logger(tracer.unwrap(), envs.project_id.clone());
+    } else {
+        tools::init_logger_without_trace()
     }
 
     // third party dependencies
@@ -32,7 +34,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     // services
     let context = AppContext {
-        pubsub_service: Arc::new(ExampleService::new(event_repository)),
+        example_srv: Arc::new(ExampleService::new(event_repository)),
     };
 
     // start server
@@ -43,7 +45,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 struct AppContext {
-    pub pubsub_service: Arc<ExampleService>,
+    pub example_srv: Arc<ExampleService>,
 }

@@ -1,8 +1,11 @@
+use bson::{oid::ObjectId, DateTime};
+use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
 use crate::domain::entities::Example;
 
+#[derive(Debug)]
 pub struct ExampleRepository {
     db: Collection<Example>,
 }
@@ -43,7 +46,8 @@ impl ExampleRepository {
             .unwrap();
     }
 
-    pub async fn get_examples(&self) -> Result<Vec<Example>, String> {
+    #[tracing::instrument]
+    pub async fn all(&self) -> Result<Vec<Example>, String> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
@@ -52,6 +56,23 @@ impl ExampleRepository {
                 Ok(events)
             }
             Err(e) => Err(format!("Failed to get events: {}", e)),
+        }
+    }
+
+    #[tracing::instrument]
+    pub async fn insert(&self, example: &mut Example) -> Result<(), mongodb::error::Error> {
+        let now = Utc::now();
+        example.id = ObjectId::new();
+        example.created_at = DateTime::from_chrono(now);
+        example.updated_at = DateTime::from_chrono(now);
+
+        let result = self.db.insert_one(example.clone()).await;
+        match result {
+            Ok(model) => {
+                example.id = model.inserted_id.as_object_id().unwrap();
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
     }
 }

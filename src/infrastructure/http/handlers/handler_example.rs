@@ -1,22 +1,27 @@
-use axum::{response, Json};
+use axum::{extract::State, response, Json};
 
-use crate::infrastructure::http::{dto, HttpError};
+use crate::{
+    infrastructure::http::{dto::ExampleDto, HttpError},
+    AppContext,
+};
 
 #[tracing::instrument]
-pub async fn get_examples() -> Result<impl response::IntoResponse, HttpError> {
-    let example = get_example().await?;
-    tracing::info!("acá: {:?}", example);
-
-    Ok(Json(example))
+pub async fn get_examples(
+    State(ctx): State<AppContext>,
+) -> Result<impl response::IntoResponse, HttpError> {
+    let examples = ctx.example_srv.get_examples().await?;
+    Ok(Json(
+        examples
+            .into_iter()
+            .map(ExampleDto::from)
+            .collect::<Vec<_>>(),
+    ))
 }
 
 #[tracing::instrument]
-pub async fn get_example() -> Result<dto::ExampleDto, HttpError> {
-    let example = dto::ExampleDto {
-        name: "example".to_string(),
-    };
-
-    tracing::info!("Aqui");
-
-    Ok(example)
+pub async fn add_random_example(
+    State(ctx): State<AppContext>,
+) -> Result<impl response::IntoResponse, HttpError> {
+    let example = ctx.example_srv.add_random_example().await?;
+    Ok(Json(ExampleDto::from(example)))
 }
