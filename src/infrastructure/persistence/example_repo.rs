@@ -1,21 +1,22 @@
+use async_trait::async_trait;
 use bson::{oid::ObjectId, DateTime};
 use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
-use crate::domain::entities::Example;
+use crate::domain::{entities, ports};
 
 #[derive(Debug)]
 pub struct ExampleRepository {
-    db: Collection<Example>,
+    db: Collection<entities::Example>,
 }
 
 impl ExampleRepository {
-    pub async fn new(client: &mongodb::Database) -> Self {
-        let collection = client.collection::<Example>("examples");
+    pub async fn new(client: &mongodb::Database) -> Box<dyn ports::PortExampleRepo> {
+        let collection = client.collection::<entities::Example>("examples");
         let a = Self { db: collection };
         a.create_index().await;
-        a
+        Box::new(a)
     }
 
     async fn create_index(&self) {
@@ -45,14 +46,18 @@ impl ExampleRepository {
             .await
             .unwrap();
     }
+}
 
+#[async_trait]
+impl ports::PortExampleRepo for ExampleRepository {
     #[tracing::instrument]
-    pub async fn all(&self) -> Result<Vec<Example>, String> {
+    async fn all(&self) -> Result<Vec<entities::Example>, String> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
             Ok(cursor) => {
-                let events: Vec<Example> = cursor.try_collect().await.map_err(|e| e.to_string())?;
+                let events: Vec<entities::Example> =
+                    cursor.try_collect().await.map_err(|e| e.to_string())?;
                 Ok(events)
             }
             Err(e) => Err(format!("Failed to get events: {}", e)),
@@ -60,7 +65,11 @@ impl ExampleRepository {
     }
 
     #[tracing::instrument]
-    pub async fn insert(&self, example: &mut Example) -> Result<(), mongodb::error::Error> {
+    async fn insert(
+        &self,
+        example: entities::Example,
+    ) -> Result<entities::Example, mongodb::error::Error> {
+        let mut example = example.clone(); // Clone the example to avoid ownership issues
         let now = Utc::now();
         example.id = ObjectId::new();
         example.created_at = DateTime::from_chrono(now);
@@ -70,7 +79,7 @@ impl ExampleRepository {
         match result {
             Ok(model) => {
                 example.id = model.inserted_id.as_object_id().unwrap();
-                Ok(())
+                Ok(example)
             }
             Err(e) => Err(e),
         }

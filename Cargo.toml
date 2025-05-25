@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.8.4"
+axum = "0.8"
 base64 = "0"
 bson = { version = "2", features = ["chrono-0_4"] }
 chrono = { version = "0", features = ["serde"] }
@@ -26,3 +26,4 @@ opentelemetry_sdk = "0.29"
 opentelemetry-gcloud-trace = "0.19"
 opentelemetry-semantic-conventions = "0.29.0"
 rand = "0.9.1"
+async-trait = "0.1.88"

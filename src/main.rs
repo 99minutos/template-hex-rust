@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use domain::ports;
 use dotenv::dotenv;
 use implementation::ExampleService;
 use infrastructure::{
@@ -30,7 +31,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone()).await?;
 
     // repositories
-    let event_repository = Arc::new(ExampleRepository::new(&mongodb.get_database()).await);
+    let event_repository = ExampleRepository::new(&mongodb.get_database()).await;
 
     // services
     let context = AppContext {
