@@ -1,5 +1,5 @@
-mod mongo_provider;
-mod redis_provider;
+mod prv_mongo;
+mod prv_redis;
 
-pub use mongo_provider::MongoProvider;
-pub use redis_provider::RedisProvider;
+pub use prv_mongo::MongoProvider;
+pub use prv_redis::RedisProvider;
