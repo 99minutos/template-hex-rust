@@ -13,8 +13,7 @@ pub struct ExampleService {
 }
 
 impl ExampleService {
-    pub fn new(example_repo: Box<dyn ports::PortExampleRepo>) -> Self {
-        let example_repo = Arc::new(example_repo);
+    pub fn new(example_repo: Arc<Box<dyn ports::PortExampleRepo>>) -> Self {
         ExampleService { example_repo }
     }
 
