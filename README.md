@@ -121,6 +121,10 @@ The template includes several optional providers in `src/infrastructure/provider
 
 These are not wired into the application by default. To use them, you must expose them in `src/infrastructure/providers/mod.rs` and initialize them in `main.rs`, similar to how `MongoProvider` is handled.
 
+## Notes
+
+- **SonarQube Configuration**: The `sonar-project.properties` file contains a project key for SonarQube. You should either delete this file if you are not using SonarQube, or update the `sonar.projectKey` with your own project's key.
+
 ## API Endpoints
 
 This template provides a simple example feature with the following endpoints:
