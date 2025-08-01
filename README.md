@@ -6,8 +6,8 @@ This repository serves as a production-ready template for building scalable and 
 
 The project's structure is designed to isolate business logic from external concerns like databases, web frameworks, and other services. This is achieved by dividing the code into three main layers:
 
-1.  **Domain (`src/domain`)**: The heart of the application. It contains the core business logic, entities, and abstract interfaces (ports) that define how the domain interacts with the outside world. This layer has **zero** knowledge of external technologies.
-2.  **Implementation (`src/implementation`)**: This layer contains the application-specific use cases or services. It orchestrates the flow of data, calling methods on the domain entities and using the ports defined in the domain layer. It acts as a bridge between the infrastructure and the domain.
+1.  **Domain (`src/domain`)**: The heart of the application. It contains the core business logic, entity, and abstract interfaces (ports) that define how the domain interacts with the outside world. This layer has **zero** knowledge of external technologies.
+2.  **Implementation (`src/implementation`)**: This layer contains the application-specific use cases or services. It orchestrates the flow of data, calling methods on the domain entity and using the ports defined in the domain layer. It acts as a bridge between the infrastructure and the domain.
 3.  **Infrastructure (`src/infrastructure`)**: This is the outermost layer. It contains the concrete implementations of the ports defined in the domain (e.g., a MongoDB repository, an Axum web server). It handles all communication with external systems, databases, and message queues.
 
 This separation ensures that the core business logic (`domain`) can be changed and tested independently of the technology choices made in the `infrastructure` layer.

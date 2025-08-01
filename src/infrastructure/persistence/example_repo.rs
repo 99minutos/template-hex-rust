@@ -6,16 +6,16 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
-use crate::domain::{entities, ports};
+use crate::domain::{entity, ports};
 
 #[derive(Debug)]
 pub struct ExampleRepository {
-    db: Collection<entities::Example>,
+    db: Collection<entity::Example>,
 }
 
 impl ExampleRepository {
     pub async fn new(client: &mongodb::Database) -> Arc<Box<dyn ports::PortExampleRepo>> {
-        let collection = client.collection::<entities::Example>("examples");
+        let collection = client.collection::<entity::Example>("examples");
         let a = Self { db: collection };
         a.create_index().await;
         Arc::new(Box::new(a))
@@ -53,12 +53,12 @@ impl ExampleRepository {
 #[async_trait]
 impl ports::PortExampleRepo for ExampleRepository {
     #[tracing::instrument]
-    async fn all(&self) -> Result<Vec<entities::Example>, String> {
+    async fn all(&self) -> Result<Vec<entity::Example>, String> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
             Ok(cursor) => {
-                let events: Vec<entities::Example> =
+                let events: Vec<entity::Example> =
                     cursor.try_collect().await.map_err(|e| e.to_string())?;
                 Ok(events)
             }
@@ -69,8 +69,8 @@ impl ports::PortExampleRepo for ExampleRepository {
     #[tracing::instrument]
     async fn insert(
         &self,
-        example: entities::Example,
-    ) -> Result<entities::Example, mongodb::error::Error> {
+        example: entity::Example,
+    ) -> Result<entity::Example, mongodb::error::Error> {
         let mut example = example.clone(); // Clone the example to avoid ownership issues
         let now = Utc::now();
         example.id = ObjectId::new();

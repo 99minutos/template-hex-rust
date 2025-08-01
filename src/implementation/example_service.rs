@@ -3,7 +3,7 @@ use std::sync::Arc;
 use axum::http::StatusCode;
 
 use crate::{
-    domain::{entities, ports},
+    domain::{entity, ports},
     infrastructure::http::HttpError,
 };
 
@@ -18,7 +18,7 @@ impl ExampleService {
     }
 
     #[tracing::instrument]
-    pub async fn get_examples(&self) -> Result<Vec<entities::Example>, HttpError> {
+    pub async fn get_examples(&self) -> Result<Vec<entity::Example>, HttpError> {
         let examples = self
             .example_repo
             .all()
@@ -29,8 +29,8 @@ impl ExampleService {
     }
 
     #[tracing::instrument]
-    pub async fn add_random_example(&self) -> Result<entities::Example, HttpError> {
-        let mut example = entities::Example::default();
+    pub async fn add_random_example(&self) -> Result<entity::Example, HttpError> {
+        let mut example = entity::Example::default();
         example.name = format!("example-{}", rand::random::<u32>());
 
         let example = self

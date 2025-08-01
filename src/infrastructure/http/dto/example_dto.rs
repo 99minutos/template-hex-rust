@@ -2,7 +2,7 @@ use bson::oid::ObjectId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::entities::Example;
+use crate::domain::entity::Example;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ExampleDto {
