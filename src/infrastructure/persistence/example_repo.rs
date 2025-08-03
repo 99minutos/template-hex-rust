@@ -52,7 +52,7 @@ impl ExampleRepository {
 
 #[async_trait]
 impl ports::PortExampleRepo for ExampleRepository {
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn all(&self) -> Result<Vec<entity::Example>, String> {
         let filter = doc! {};
 
@@ -66,7 +66,7 @@ impl ports::PortExampleRepo for ExampleRepository {
         }
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     async fn insert(
         &self,
         example: entity::Example,
