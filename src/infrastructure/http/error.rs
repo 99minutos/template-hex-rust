@@ -8,15 +8,17 @@ use axum::{
 use serde::Serialize;
 use serde_json::Value;
 
+/// Transport-level error type used by HTTP handlers/adapters.
 #[derive(Debug)]
 pub enum HttpError {
+    /// Custom error with HTTP status, public message, and optional metadata payload.
     Custom(StatusCode, String, Option<Value>),
 }
 
 impl fmt::Display for HttpError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Custom(_, msg, _) => write!(f, "not found: {}", msg),
+            Self::Custom(_, msg, _) => write!(f, "{msg}"),
         }
     }
 }
@@ -40,5 +42,28 @@ impl IntoResponse for HttpError {
         });
 
         (status, error_response).into_response()
+    }
+}
+
+/// Map domain/application errors to transport-level HTTP errors.
+impl From<crate::domain::errors::DomainError> for HttpError {
+    fn from(err: crate::domain::errors::DomainError) -> Self {
+        match err {
+            crate::domain::errors::DomainError::NotFound(m) => {
+                HttpError::Custom(StatusCode::NOT_FOUND, m, None)
+            }
+            crate::domain::errors::DomainError::Conflict(m) => {
+                HttpError::Custom(StatusCode::CONFLICT, m, None)
+            }
+            crate::domain::errors::DomainError::Validation(m) => {
+                HttpError::Custom(StatusCode::BAD_REQUEST, m, None)
+            }
+            crate::domain::errors::DomainError::Transient(m) => {
+                HttpError::Custom(StatusCode::BAD_GATEWAY, m, None)
+            }
+            crate::domain::errors::DomainError::Unknown(m) => {
+                HttpError::Custom(StatusCode::INTERNAL_SERVER_ERROR, m, None)
+            }
+        }
     }
 }

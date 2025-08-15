@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use domain::ports;
 use dotenv::dotenv;
 use implementation::ExampleService;
 use infrastructure::{

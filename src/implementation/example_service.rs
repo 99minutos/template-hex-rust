@@ -1,11 +1,6 @@
 use std::sync::Arc;
 
-use axum::http::StatusCode;
-
-use crate::{
-    domain::{entities, ports},
-    infrastructure::http::HttpError,
-};
+use crate::domain::{entities, ports, DomainResult};
 
 #[derive(Debug, Clone)]
 pub struct ExampleService {
@@ -18,26 +13,14 @@ impl ExampleService {
     }
 
     #[tracing::instrument]
-    pub async fn get_examples(&self) -> Result<Vec<entities::Example>, HttpError> {
-        let examples = self
-            .example_repo
-            .all()
-            .await
-            .map_err(|e| HttpError::Custom(StatusCode::BAD_GATEWAY, e, None))?;
-
-        Ok(examples)
+    pub async fn get_examples(&self) -> DomainResult<Vec<entities::Example>> {
+        self.example_repo.all().await
     }
 
     #[tracing::instrument]
-    pub async fn add_random_example(&self) -> Result<entities::Example, HttpError> {
+    pub async fn add_random_example(&self) -> DomainResult<entities::Example> {
         let mut example = entities::Example::default();
         example.name = format!("example-{}", rand::random::<u32>());
-
-        let example = self
-            .example_repo
-            .insert(example)
-            .await
-            .map_err(|e| HttpError::Custom(StatusCode::BAD_GATEWAY, e.to_string(), None))?;
-        Ok(example)
+        self.example_repo.insert(example).await
     }
 }

@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
-use crate::domain::{entities, ports};
+use crate::domain::{entities, ports, DomainError, DomainResult};
 
 #[derive(Debug)]
 pub struct ExampleRepository {
@@ -53,24 +53,26 @@ impl ExampleRepository {
 #[async_trait]
 impl ports::PortExampleRepo for ExampleRepository {
     #[tracing::instrument]
-    async fn all(&self) -> Result<Vec<entities::Example>, String> {
+    async fn all(&self) -> DomainResult<Vec<entities::Example>> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
             Ok(cursor) => {
-                let events: Vec<entities::Example> =
-                    cursor.try_collect().await.map_err(|e| e.to_string())?;
+                let events: Vec<entities::Example> = cursor
+                    .try_collect()
+                    .await
+                    .map_err(|e| DomainError::Transient(e.to_string()))?;
                 Ok(events)
             }
-            Err(e) => Err(format!("Failed to get events: {}", e)),
+            Err(e) => Err(DomainError::Transient(format!(
+                "Failed to get events: {}",
+                e
+            ))),
         }
     }
 
     #[tracing::instrument]
-    async fn insert(
-        &self,
-        example: entities::Example,
-    ) -> Result<entities::Example, mongodb::error::Error> {
+    async fn insert(&self, example: entities::Example) -> DomainResult<entities::Example> {
         let mut example = example.clone(); // Clone the example to avoid ownership issues
         let now = Utc::now();
         example.id = ObjectId::new();
@@ -79,11 +81,11 @@ impl ports::PortExampleRepo for ExampleRepository {
 
         let result = self.db.insert_one(example.clone()).await;
         match result {
-            Ok(model) => {
-                example.id = model.inserted_id.as_object_id().unwrap();
+            Ok(_) => {
+                // inserted_id ignored; id was set before insert
                 Ok(example)
             }
-            Err(e) => Err(e),
+            Err(e) => Err(DomainError::Transient(e.to_string())),
         }
     }
 }
