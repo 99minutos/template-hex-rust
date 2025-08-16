@@ -73,7 +73,7 @@ impl ports::PortExampleRepo for ExampleRepository {
 
     #[tracing::instrument]
     async fn insert(&self, example: entities::Example) -> DomainResult<entities::Example> {
-        let mut example = example.clone(); // Clone the example to avoid ownership issues
+        let mut example = example.clone();
         let now = Utc::now();
         example.id = ObjectId::new();
         example.created_at = DateTime::from_chrono(now);
@@ -81,10 +81,7 @@ impl ports::PortExampleRepo for ExampleRepository {
 
         let result = self.db.insert_one(example.clone()).await;
         match result {
-            Ok(_) => {
-                // inserted_id ignored; id was set before insert
-                Ok(example)
-            }
+            Ok(_) => Ok(example),
             Err(e) => Err(DomainError::Transient(e.to_string())),
         }
     }

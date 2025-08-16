@@ -38,7 +38,6 @@ impl CloudTaskProvider {
         Self { client, parent }
     }
 
-    // Sends an HTTP POST task to the Cloud Tasks queue
     pub async fn send_http_task(
         &self,
         destination_url: String,

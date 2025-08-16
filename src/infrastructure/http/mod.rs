@@ -15,7 +15,6 @@ pub struct HttpProvider {
     server: Serve<TcpListener, Router, Router>,
 }
 
-// This module is responsible for setting up the HTTP server
 impl HttpProvider {
     pub async fn new(port: u16, routes: Router) -> Self {
         let addr = format!("0.0.0.0:{}", port);

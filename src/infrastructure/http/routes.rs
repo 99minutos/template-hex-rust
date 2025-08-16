@@ -11,7 +11,6 @@ pub struct HttpRouter;
 
 impl HttpRouter {
     pub fn create_routes(app_context: AppContext) -> Router {
-        // example routes
         let examples = Router::new()
             .route("/", routing::get(handler_example::get_examples))
             .route(
@@ -19,7 +18,6 @@ impl HttpRouter {
                 routing::post(handler_example::add_random_example),
             );
 
-        // all routes handled by axum
         let trace = TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
             let method = request.method().clone();
             let uri = request.uri().to_string();

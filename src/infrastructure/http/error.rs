@@ -8,10 +8,8 @@ use axum::{
 use serde::Serialize;
 use serde_json::Value;
 
-/// Transport-level error type used by HTTP handlers/adapters.
 #[derive(Debug)]
 pub enum HttpError {
-    /// Custom error with HTTP status, public message, and optional metadata payload.
     Custom(StatusCode, String, Option<Value>),
 }
 
@@ -45,7 +43,6 @@ impl IntoResponse for HttpError {
     }
 }
 
-/// Map domain/application errors to transport-level HTTP errors.
 impl From<crate::domain::errors::DomainError> for HttpError {
     fn from(err: crate::domain::errors::DomainError) -> Self {
         match err {

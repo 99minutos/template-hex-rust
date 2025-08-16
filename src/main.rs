@@ -26,18 +26,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tools::init_logger_without_trace()
     }
 
-    // third party dependencies
     let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone()).await?;
 
-    // repositories
     let event_repository = ExampleRepository::new(&mongodb.get_database()).await;
 
-    // services
     let context = AppContext {
         example_srv: Arc::new(ExampleService::new(event_repository)),
     };
 
-    // start server
     let routes = HttpRouter::create_routes(context);
     let server = HttpProvider::new(envs.port, routes).await;
     server.run().await;
