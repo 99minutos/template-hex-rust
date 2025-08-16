@@ -5,7 +5,7 @@ use crate::{
     AppContext,
 };
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 pub async fn get_examples(
     State(ctx): State<AppContext>,
 ) -> Result<impl response::IntoResponse, HttpError> {
@@ -22,7 +22,7 @@ pub async fn get_examples(
     ))
 }
 
-#[tracing::instrument]
+#[tracing::instrument(skip_all)]
 pub async fn add_random_example(
     State(ctx): State<AppContext>,
 ) -> Result<impl response::IntoResponse, HttpError> {

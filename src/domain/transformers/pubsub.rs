@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use std::{collections::HashMap, str::from_utf8};
 
 use base64::engine::general_purpose::STANDARD as base64_engine;

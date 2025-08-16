@@ -12,12 +12,12 @@ impl ExampleService {
         ExampleService { example_repo }
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     pub async fn get_examples(&self) -> DomainResult<Vec<entities::Example>> {
         self.example_repo.all().await
     }
 
-    #[tracing::instrument]
+    #[tracing::instrument(skip_all)]
     pub async fn add_random_example(&self) -> DomainResult<entities::Example> {
         let mut example = entities::Example::default();
         example.name = format!("example-{}", rand::random::<u32>());

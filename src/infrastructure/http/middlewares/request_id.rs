@@ -1,12 +1,14 @@
 use std::task::{Context, Poll};
 
 use axum::{
-    http::{HeaderName, HeaderValue, Request},
+    http::{HeaderValue, Request},
     response::Response,
 };
 use futures::future::BoxFuture;
-use rand::{distr::Alphanumeric, Rng};
+use opentelemetry::{trace::TraceContextExt, TraceId};
 use tower::{Layer, Service};
+use tracing::Span;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 #[derive(Debug, Clone)]
 pub struct RequestId(pub String);
@@ -43,35 +45,21 @@ where
     }
 
     fn call(&mut self, mut req: Request<B>) -> Self::Future {
-        let mut rng = rand::rng();
+        let request_id = Span::current().context().span().span_context().trace_id();
 
-        let request_id = if let Some(val) = req.headers().get("x-request-id") {
-            match val.to_str() {
-                Ok(s) if !s.is_empty() => s.to_string(),
-                _ => rng
-                    .sample_iter(&Alphanumeric)
-                    .take(16)
-                    .map(char::from)
-                    .collect::<String>(),
-            }
-        } else {
-            rng.sample_iter(&Alphanumeric)
-                .take(16)
-                .map(char::from)
-                .collect::<String>()
-        };
+        let trace_id_str = request_id.to_string();
+        if request_id != TraceId::INVALID {
+            req.extensions_mut().insert(RequestId(trace_id_str.clone()));
+        }
 
-        req.extensions_mut().insert(RequestId(request_id.clone()));
-
-        let mut svc = self.inner.clone();
-        let fut = svc.call(req);
+        let future = self.inner.call(req);
 
         Box::pin(async move {
-            let mut res = fut.await?;
+            let mut res = future.await?;
 
-            if let Ok(hv) = HeaderValue::from_str(&request_id) {
+            if request_id != TraceId::INVALID {
                 res.headers_mut()
-                    .insert(HeaderName::from_static("x-request-id"), hv);
+                    .insert("x-trace-id", HeaderValue::from_str(&trace_id_str).unwrap());
             }
             Ok(res)
         })

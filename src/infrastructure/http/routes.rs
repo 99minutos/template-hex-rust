@@ -32,9 +32,9 @@ impl HttpRouter {
         let routes = Router::new()
             .route("/healthz", routing::get(|| async { "ok" }))
             .nest("/api/v1/example", examples)
-            .layer(trace)
-            .layer(RequestIdLayer::default())
             .layer(CorsLayer::permissive())
+            .layer(RequestIdLayer::default())
+            .layer(trace)
             .with_state(app_context);
 
         routes
