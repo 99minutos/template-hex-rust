@@ -33,3 +33,20 @@ pub async fn add_random_example(
         .map_err(HttpError::from)?;
     Ok(Json(ExampleDto::from(example)))
 }
+
+#[tracing::instrument(skip_all)]
+pub async fn get_examples_with_error(
+    State(ctx): State<AppContext>,
+) -> Result<impl response::IntoResponse, HttpError> {
+    let examples = ctx
+        .example_srv
+        .get_examples_with_error()
+        .await
+        .map_err(HttpError::from)?;
+    Ok(Json(
+        examples
+            .into_iter()
+            .map(ExampleDto::from)
+            .collect::<Vec<_>>(),
+    ))
+}

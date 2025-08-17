@@ -16,6 +16,10 @@ impl HttpRouter {
             .route(
                 "/random",
                 routing::post(handler_example::add_random_example),
+            )
+            .route(
+                "/error",
+                routing::get(handler_example::get_examples_with_error),
             );
 
         let trace = TraceLayer::new_for_http().make_span_with(|request: &Request<_>| {
