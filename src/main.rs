@@ -20,8 +20,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let envs = crate::envs::get();
     let tracer = tools::init_tracer(envs.service_name.clone()).await;
-    if tracer.is_ok() {
-        tools::init_logger(tracer.unwrap(), envs.project_id.clone());
+    if tracer.is_ok() && envs.project_id.is_some() {
+        tools::init_logger(tracer.unwrap(), envs.project_id.clone().unwrap());
     } else {
         tools::init_logger_without_trace()
     }
