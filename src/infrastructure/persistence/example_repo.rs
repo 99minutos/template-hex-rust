@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
-use crate::domain::{entities, ports, DomainError, DomainResult};
+use crate::domain::{entities, ports, DomainError, DomainWrapper};
 
 #[derive(Debug)]
 pub struct ExampleRepository {
@@ -53,7 +53,7 @@ impl ExampleRepository {
 #[async_trait]
 impl ports::PortExampleRepo for ExampleRepository {
     #[tracing::instrument(skip_all)]
-    async fn all(&self) -> DomainResult<Vec<entities::Example>> {
+    async fn all(&self) -> DomainWrapper<Vec<entities::Example>> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
@@ -72,7 +72,7 @@ impl ports::PortExampleRepo for ExampleRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    async fn insert(&self, example: entities::Example) -> DomainResult<entities::Example> {
+    async fn insert(&self, example: entities::Example) -> DomainWrapper<entities::Example> {
         let mut example = example.clone();
         let now = Utc::now();
         example.id = ObjectId::new();

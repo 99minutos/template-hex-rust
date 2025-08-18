@@ -1,52 +1,37 @@
-use axum::{extract::State, response, Json};
+use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 
 use crate::{
-    infrastructure::http::{dto::ExampleDto, HttpError},
+    infrastructure::http::{dto::example_dto::ExampleDto, response::GenericApiResponse},
     AppContext,
 };
 
 #[tracing::instrument(skip_all)]
-pub async fn get_examples(
-    State(ctx): State<AppContext>,
-) -> Result<impl response::IntoResponse, HttpError> {
-    let examples = ctx
-        .example_srv
-        .get_examples()
-        .await
-        .map_err(HttpError::from)?;
-    Ok(Json(
+pub async fn get_examples(State(ctx): State<AppContext>) -> impl IntoResponse {
+    let examples = ctx.example_srv.get_examples().await;
+    let response = examples.map(|examples| {
         examples
             .into_iter()
             .map(ExampleDto::from)
-            .collect::<Vec<_>>(),
-    ))
+            .collect::<Vec<_>>()
+    });
+    Json(GenericApiResponse::from(response))
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn add_random_example(
-    State(ctx): State<AppContext>,
-) -> Result<impl response::IntoResponse, HttpError> {
-    let example = ctx
-        .example_srv
-        .add_random_example()
-        .await
-        .map_err(HttpError::from)?;
-    Ok(Json(ExampleDto::from(example)))
+pub async fn add_random_example(State(ctx): State<AppContext>) -> impl IntoResponse {
+    let example = ctx.example_srv.add_random_example().await;
+    let response = example.map(ExampleDto::from);
+    Json(GenericApiResponse::from(response))
 }
 
 #[tracing::instrument(skip_all)]
-pub async fn get_examples_with_error(
-    State(ctx): State<AppContext>,
-) -> Result<impl response::IntoResponse, HttpError> {
-    let examples = ctx
-        .example_srv
-        .get_examples_with_error()
-        .await
-        .map_err(HttpError::from)?;
-    Ok(Json(
+pub async fn get_examples_with_error(State(ctx): State<AppContext>) -> impl IntoResponse {
+    let examples = ctx.example_srv.get_examples_with_error().await;
+    let response = examples.map(|examples| {
         examples
             .into_iter()
             .map(ExampleDto::from)
-            .collect::<Vec<_>>(),
-    ))
+            .collect::<Vec<_>>()
+    });
+    Json(GenericApiResponse::from(response))
 }

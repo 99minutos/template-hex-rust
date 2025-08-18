@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::domain::{entities, ports, DomainError, DomainResult};
+use crate::domain::{entities, ports, DomainError, DomainWrapper};
 
 #[derive(Debug, Clone)]
 pub struct ExampleService {
@@ -13,17 +13,17 @@ impl ExampleService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn get_examples(&self) -> DomainResult<Vec<entities::Example>> {
+    pub async fn get_examples(&self) -> DomainWrapper<Vec<entities::Example>> {
         self.example_repo.all().await
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn get_examples_with_error(&self) -> DomainResult<Vec<entities::Example>> {
+    pub async fn get_examples_with_error(&self) -> DomainWrapper<Vec<entities::Example>> {
         Err(DomainError::Transient("example error".to_string()))
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn add_random_example(&self) -> DomainResult<entities::Example> {
+    pub async fn add_random_example(&self) -> DomainWrapper<entities::Example> {
         let mut example = entities::Example::default();
         example.name = format!("example-{}", rand::random::<u32>());
         self.example_repo.insert(example).await

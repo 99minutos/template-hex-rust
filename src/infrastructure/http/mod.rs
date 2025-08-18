@@ -1,11 +1,9 @@
-mod dto;
-mod error;
+pub mod dto;
 mod handlers;
 mod middlewares;
 mod routes;
 use axum::{serve::Serve, Router};
-
-pub use error::HttpError;
+mod response;
 pub use routes::HttpRouter;
 
 use tokio::net::TcpListener;
