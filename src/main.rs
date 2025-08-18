@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use domain::ports;
 use dotenv::dotenv;
 use implementation::ExampleService;
 use infrastructure::{
@@ -21,24 +20,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let envs = crate::envs::get();
     let tracer = tools::init_tracer(envs.service_name.clone()).await;
-    if tracer.is_ok() {
-        tools::init_logger(tracer.unwrap(), envs.project_id.clone());
+    if tracer.is_ok() && envs.project_id.is_some() {
+        tools::init_logger(tracer.unwrap(), envs.project_id.clone().unwrap());
     } else {
         tools::init_logger_without_trace()
     }
 
-    // third party dependencies
     let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone()).await?;
 
-    // repositories
     let event_repository = ExampleRepository::new(&mongodb.get_database()).await;
 
-    // services
     let context = AppContext {
         example_srv: Arc::new(ExampleService::new(event_repository)),
     };
 
-    // start server
     let routes = HttpRouter::create_routes(context);
     let server = HttpProvider::new(envs.port, routes).await;
     server.run().await;

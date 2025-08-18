@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
-use crate::domain::{entities, ports};
+use crate::domain::{entities, ports, DomainError, DomainWrapper};
 
 #[derive(Debug)]
 pub struct ExampleRepository {
@@ -52,26 +52,28 @@ impl ExampleRepository {
 
 #[async_trait]
 impl ports::PortExampleRepo for ExampleRepository {
-    #[tracing::instrument]
-    async fn all(&self) -> Result<Vec<entities::Example>, String> {
+    #[tracing::instrument(skip_all)]
+    async fn all(&self) -> DomainWrapper<Vec<entities::Example>> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
             Ok(cursor) => {
-                let events: Vec<entities::Example> =
-                    cursor.try_collect().await.map_err(|e| e.to_string())?;
+                let events: Vec<entities::Example> = cursor
+                    .try_collect()
+                    .await
+                    .map_err(|e| DomainError::Transient(e.to_string()))?;
                 Ok(events)
             }
-            Err(e) => Err(format!("Failed to get events: {}", e)),
+            Err(e) => Err(DomainError::Transient(format!(
+                "Failed to get events: {}",
+                e
+            ))),
         }
     }
 
-    #[tracing::instrument]
-    async fn insert(
-        &self,
-        example: entities::Example,
-    ) -> Result<entities::Example, mongodb::error::Error> {
-        let mut example = example.clone(); // Clone the example to avoid ownership issues
+    #[tracing::instrument(skip_all)]
+    async fn insert(&self, example: entities::Example) -> DomainWrapper<entities::Example> {
+        let mut example = example.clone();
         let now = Utc::now();
         example.id = ObjectId::new();
         example.created_at = DateTime::from_chrono(now);
@@ -79,11 +81,8 @@ impl ports::PortExampleRepo for ExampleRepository {
 
         let result = self.db.insert_one(example.clone()).await;
         match result {
-            Ok(model) => {
-                example.id = model.inserted_id.as_object_id().unwrap();
-                Ok(example)
-            }
-            Err(e) => Err(e),
+            Ok(_) => Ok(example),
+            Err(e) => Err(DomainError::Transient(e.to_string())),
         }
     }
 }

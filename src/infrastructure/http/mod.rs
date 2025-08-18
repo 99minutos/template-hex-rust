@@ -1,11 +1,9 @@
-mod dto;
-mod error;
+pub mod dto;
 mod handlers;
 mod middlewares;
 mod routes;
 use axum::{serve::Serve, Router};
-
-pub use error::HttpError;
+mod response;
 pub use routes::HttpRouter;
 
 use tokio::net::TcpListener;
@@ -15,7 +13,6 @@ pub struct HttpProvider {
     server: Serve<TcpListener, Router, Router>,
 }
 
-// This module is responsible for setting up the HTTP server
 impl HttpProvider {
     pub async fn new(port: u16, routes: Router) -> Self {
         let addr = format!("0.0.0.0:{}", port);
