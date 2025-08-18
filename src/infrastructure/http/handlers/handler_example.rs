@@ -1,4 +1,4 @@
-use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
+use axum::{extract::State, response::IntoResponse, Json};
 
 use crate::{
     infrastructure::http::{dto::example_dto::ExampleDto, response::GenericApiResponse},

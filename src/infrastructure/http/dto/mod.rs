@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 pub mod example_dto;
 
 pub trait OutputDto {}
