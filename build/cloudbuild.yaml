@@ -1,17 +1,4 @@
 steps:
-  - id: "Configurar credenciales de Git"
-    name: "gcr.io/cloud-builders/git"
-    secretEnv: ["GITHUB_USER", "GITHUB_PWD"]
-    entrypoint: "bash"
-    args:
-      - -c
-      - |
-        git config --global credential.helper store
-        git config --global url."https://github.com/".insteadOf "git@github.com:"
-        echo "https://$$GITHUB_USER:$$GITHUB_PWD@github.com" > ~/.git-credentials
-        chmod 600 ~/.git-credentials
-        git submodule update --init --recursive
-
   - id: "Building container image"
     name: "gcr.io/cloud-builders/docker"
     entrypoint: "bash"
