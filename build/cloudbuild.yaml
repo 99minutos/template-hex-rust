@@ -1,0 +1,60 @@
+steps:
+  - id: "Configurar credenciales de Git"
+    name: "gcr.io/cloud-builders/git"
+    secretEnv: ["GITHUB_USER", "GITHUB_PWD"]
+    entrypoint: "bash"
+    args:
+      - -c
+      - |
+        git config --global credential.helper store
+        git config --global url."https://github.com/".insteadOf "git@github.com:"
+        echo "https://$$GITHUB_USER:$$GITHUB_PWD@github.com" > ~/.git-credentials
+        chmod 600 ~/.git-credentials
+        git submodule update --init --recursive
+
+  - id: "Building container image"
+    name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args:
+      - -c
+      - |
+        docker build -t us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA \
+          -f build/Dockerfile .
+
+  - id: "Registering container..."
+    name: "gcr.io/cloud-builders/docker"
+    args:
+      [
+        "push",
+        "us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA",
+      ]
+
+  - name: "gcr.io/cloud-builders/gcloud"
+    args:
+      - "run"
+      - "deploy"
+      - "$_SERVICE_NAME"
+      - "--image=us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--service-account=$SERVICE_ACCOUNT_EMAIL"
+      - "--cpu-boost"
+      - "--region=us-central1"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      - "--set-env-vars=SERVICE_NAME=$_SERVICE_NAME"
+      - "--set-env-vars=MONGO_DB=$_MONGO_DB"
+      - "--set-secrets=^##^MONGO_URL=$_MONGO_URL"
+      - "--set-env-vars=DEBUG_LEVEL=$_DEBUG_LEVEL"
+
+substitutions:
+  _DEBUG_LEVEL: "INFO"
+
+options:
+  machineType: E2_HIGHCPU_32
+  logging: CLOUD_LOGGING_ONLY
+
+availableSecrets:
+  secretManager:
+    - versionName: projects/shared-resources-451520/secrets/GITHUB_PWD/versions/latest
+      env: "GITHUB_PWD"
+    - versionName: projects/shared-resources-451520/secrets/GITHUB_USER/versions/latest
+      env: "GITHUB_USER"
