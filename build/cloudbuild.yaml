@@ -49,12 +49,5 @@ substitutions:
   _DEBUG_LEVEL: "INFO"
 
 options:
-  machineType: E2_HIGHCPU_32
+  machineType: E2_HIGHCPU_8
   logging: CLOUD_LOGGING_ONLY
-
-availableSecrets:
-  secretManager:
-    - versionName: projects/shared-resources-451520/secrets/GITHUB_PWD/versions/latest
-      env: "GITHUB_PWD"
-    - versionName: projects/shared-resources-451520/secrets/GITHUB_USER/versions/latest
-      env: "GITHUB_USER"
