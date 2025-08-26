@@ -7,31 +7,31 @@ use crate::{
 
 #[tracing::instrument(skip_all)]
 pub async fn get_examples(State(ctx): State<AppContext>) -> impl IntoResponse {
-    let examples = ctx.example_srv.get_examples().await;
-    let response = examples.map(|examples| {
-        examples
-            .into_iter()
+    // Domain call returns DomainWrapper<Vec<Example>>; map each to DTO
+    let result = ctx.example_srv.get_examples().await.map(|list| {
+        list.into_iter()
             .map(ExampleDto::from)
-            .collect::<Vec<_>>()
+            .collect::<Vec<ExampleDto>>()
     });
-    Json(GenericApiResponse::from(response))
+    Json(GenericApiResponse::from(result))
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn add_random_example(State(ctx): State<AppContext>) -> impl IntoResponse {
-    let example = ctx.example_srv.add_random_example().await;
-    let response = example.map(ExampleDto::from);
-    Json(GenericApiResponse::from(response))
+    let result = ctx
+        .example_srv
+        .add_random_example()
+        .await
+        .map(ExampleDto::from);
+    Json(GenericApiResponse::from(result))
 }
 
 #[tracing::instrument(skip_all)]
 pub async fn get_examples_with_error(State(ctx): State<AppContext>) -> impl IntoResponse {
-    let examples = ctx.example_srv.get_examples_with_error().await;
-    let response = examples.map(|examples| {
-        examples
-            .into_iter()
+    let result = ctx.example_srv.get_examples_with_error().await.map(|list| {
+        list.into_iter()
             .map(ExampleDto::from)
-            .collect::<Vec<_>>()
+            .collect::<Vec<ExampleDto>>()
     });
-    Json(GenericApiResponse::from(response))
+    Json(GenericApiResponse::from(result))
 }

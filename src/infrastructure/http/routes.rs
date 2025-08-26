@@ -35,7 +35,13 @@ impl HttpRouter {
 
         let routes = Router::new()
             .route("/healthz", routing::get(|| async { "ok" }))
+            // BEGIN: Add your routes here
             .nest("/api/v1/example", examples)
+            //
+            //
+            //
+            //
+            // END: Add your routes here
             .layer(CorsLayer::permissive())
             .layer(RequestIdLayer::default())
             .layer(trace)
