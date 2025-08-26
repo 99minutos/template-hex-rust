@@ -1,3 +1,4 @@
+#![allow(dead_code)]
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
@@ -12,31 +13,25 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use crate::domain::{DomainError, DomainWrapper};
 
 #[derive(Debug, Serialize)]
-pub struct GenericApiResponse<T>
-where
-    T: Serialize,
-{
+pub struct GenericApiResponse {
     pub success: bool,
     pub trace_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<T>,
+    pub data: Option<serde_json::Value>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub cause: Option<String>,
     #[serde(skip_serializing)]
     status: StatusCode,
 }
 
-impl<T> IntoResponse for GenericApiResponse<T>
-where
-    T: Serialize,
-{
+impl IntoResponse for GenericApiResponse {
     fn into_response(self) -> Response {
         let body = Json(json!(self));
         (self.status, body).into_response()
     }
 }
 
-impl<T> From<DomainWrapper<T>> for GenericApiResponse<T>
+impl<T> From<DomainWrapper<T>> for GenericApiResponse
 where
     T: Serialize,
 {
@@ -52,7 +47,7 @@ where
             Ok(data) => Self {
                 success: true,
                 trace_id,
-                data: Some(data),
+                data: serde_json::to_value(data).ok(),
                 cause: None,
                 status: StatusCode::OK,
             },
@@ -61,7 +56,7 @@ where
                 Self {
                     success: false,
                     trace_id,
-                    data: None,
+                    data: err.data().cloned(),
                     cause: Some(err.message().to_string()),
                     status,
                 }
@@ -70,11 +65,8 @@ where
     }
 }
 
-impl<T> From<T> for GenericApiResponse<T>
-where
-    T: Serialize,
-{
-    fn from(value: T) -> Self {
+impl GenericApiResponse {
+    pub fn success<T: Serialize>(value: T) -> Self {
         Self {
             success: true,
             trace_id: Span::current()
@@ -83,17 +75,14 @@ where
                 .span_context()
                 .trace_id()
                 .to_string(),
-            data: Some(value),
+            data: serde_json::to_value(value).ok(),
             cause: None,
             status: StatusCode::OK,
         }
     }
 }
 
-impl<T> GenericApiResponse<T>
-where
-    T: Serialize,
-{
+impl GenericApiResponse {
     #[inline]
     fn current_trace_id() -> String {
         Span::current()
@@ -107,11 +96,11 @@ where
     #[inline]
     fn status_for_error(err: &DomainError) -> StatusCode {
         match err {
-            DomainError::NotFound(_) => StatusCode::NOT_FOUND,
-            DomainError::Conflict(_) => StatusCode::CONFLICT,
-            DomainError::Validation(_) => StatusCode::UNPROCESSABLE_ENTITY,
-            DomainError::Transient(_) => StatusCode::SERVICE_UNAVAILABLE,
-            DomainError::Unknown(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            DomainError::NotFound { .. } => StatusCode::NOT_FOUND,
+            DomainError::Conflict { .. } => StatusCode::CONFLICT,
+            DomainError::Validation { .. } => StatusCode::UNPROCESSABLE_ENTITY,
+            DomainError::Transient { .. } => StatusCode::SERVICE_UNAVAILABLE,
+            DomainError::Unknown { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 }

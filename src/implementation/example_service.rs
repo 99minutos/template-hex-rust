@@ -19,7 +19,7 @@ impl ExampleService {
 
     #[tracing::instrument(skip_all)]
     pub async fn get_examples_with_error(&self) -> DomainWrapper<Vec<entities::Example>> {
-        Err(DomainError::Transient("example error".to_string()))
+        Err(DomainError::transient("example error".to_string()))
     }
 
     #[tracing::instrument(skip_all)]

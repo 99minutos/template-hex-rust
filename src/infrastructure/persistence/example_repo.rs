@@ -61,10 +61,10 @@ impl ports::PortExampleRepo for ExampleRepository {
                 let events: Vec<entities::Example> = cursor
                     .try_collect()
                     .await
-                    .map_err(|e| DomainError::Transient(e.to_string()))?;
+                    .map_err(|e| DomainError::transient(e.to_string()))?;
                 Ok(events)
             }
-            Err(e) => Err(DomainError::Transient(format!(
+            Err(e) => Err(DomainError::transient(format!(
                 "Failed to get events: {}",
                 e
             ))),
@@ -82,7 +82,7 @@ impl ports::PortExampleRepo for ExampleRepository {
         let result = self.db.insert_one(example.clone()).await;
         match result {
             Ok(_) => Ok(example),
-            Err(e) => Err(DomainError::Transient(e.to_string())),
+            Err(e) => Err(DomainError::transient(e.to_string())),
         }
     }
 }
