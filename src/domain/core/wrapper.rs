@@ -1,4 +1,4 @@
-use crate::domain::DomainError;
+use super::DomainError;
 
 pub type DomainWrapper<T> = Result<T, DomainError>;
 
@@ -23,5 +23,11 @@ impl From<&str> for DomainError {
 impl From<String> for DomainError {
     fn from(s: String) -> Self {
         DomainError::unknown(s)
+    }
+}
+
+impl From<serde_json::Error> for DomainError {
+    fn from(err: serde_json::Error) -> Self {
+        DomainError::validation(err.to_string())
     }
 }
