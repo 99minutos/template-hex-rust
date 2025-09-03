@@ -3,7 +3,7 @@ use std::sync::Arc;
 use dotenv::dotenv;
 use implementation::ExampleService;
 use infrastructure::{
-    http::{HttpProvider, HttpRouter},
+    http::HttpProvider,
     persistence::ExampleRepository,
     providers::MongoProvider,
 };
@@ -14,8 +14,20 @@ mod implementation;
 mod infrastructure;
 mod tools;
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
+mod app_context {
+    use crate::implementation::ExampleService;
+    use std::sync::Arc;
+
+    #[derive(Debug, Clone)]
+    pub struct AppContext {
+        pub example_srv: Arc<ExampleService>,
+    }
+}
+
+pub use app_context::AppContext;
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
     let envs = crate::envs::get();
@@ -26,7 +38,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         tools::init_logger_without_trace()
     }
 
-    let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone()).await?;
+    let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone())
+        .await
+        .expect("Failed to init Mongo");
 
     let event_repository = ExampleRepository::new(&mongodb.get_database()).await;
 
@@ -34,14 +48,5 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         example_srv: Arc::new(ExampleService::new(event_repository)),
     };
 
-    let routes = HttpRouter::create_routes(context);
-    let server = HttpProvider::new(envs.port, routes).await;
-    server.run().await;
-
-    Ok(())
-}
-
-#[derive(Debug, Clone)]
-struct AppContext {
-    pub example_srv: Arc<ExampleService>,
+    HttpProvider::start_server(envs.port, context).await
 }

@@ -1,30 +1,30 @@
 mod dto;
 mod handlers;
-mod helpers;
-mod middlewares;
+mod parser;
 mod routes;
-use axum::{serve::Serve, Router};
+use actix_web::{web, App, HttpServer};
+
+use crate::AppContext;
+
 mod response;
-pub use routes::HttpRouter;
 
-use tokio::net::TcpListener;
-
-pub struct HttpProvider {
-    addr: String,
-    server: Serve<TcpListener, Router, Router>,
-}
+pub struct HttpProvider {}
 
 impl HttpProvider {
-    pub async fn new(port: u16, routes: Router) -> Self {
+    pub async fn start_server(port: u16, context: AppContext) -> Result<(), std::io::Error> {
         let addr = format!("0.0.0.0:{}", port);
-        let listerener = tokio::net::TcpListener::bind(addr.clone()).await.unwrap();
-        let server = axum::serve(listerener, routes);
 
-        Self { addr, server }
-    }
-
-    pub async fn run(self) {
-        tracing::info!("Listening on {}", self.addr);
-        self.server.await.unwrap();
+        HttpServer::new(move || {
+            App::new()
+                .app_data(web::Data::new(context.clone()))
+                .app_data(web::JsonConfig::default().error_handler(parser::json_handler))
+                .app_data(web::QueryConfig::default().error_handler(parser::query_handler))
+                .app_data(web::PathConfig::default().error_handler(parser::path_handler))
+                .configure(routes::configure)
+        })
+        .bind(addr.clone())
+        .expect("Failed to bind HTTP server")
+        .run()
+        .await
     }
 }

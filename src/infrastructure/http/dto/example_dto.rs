@@ -1,4 +1,4 @@
-use super::{InputDto, OutputDto};
+use super::OutputResponse;
 use bson::oid::ObjectId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -13,8 +13,8 @@ pub struct ExampleDto {
     pub updated_at: DateTime<Utc>,
 }
 
-impl OutputDto for ExampleDto {}
-impl InputDto for ExampleDto {}
+impl OutputResponse for ExampleDto {}
+
 
 impl From<Example> for ExampleDto {
     fn from(example: Example) -> Self {

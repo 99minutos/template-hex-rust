@@ -1,15 +1,18 @@
 use tracing_stackdriver::CloudTraceConfiguration;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer};
 
 pub fn init_logger(tracer: opentelemetry_sdk::trace::Tracer, project_id: String) {
-    let filter = EnvFilter::from_env("DEBUG_LEVEL");
-    let stackdriver = tracing_stackdriver::layer().with_cloud_trace(CloudTraceConfiguration {
-        project_id: project_id.clone(),
-    });
+    let base_level = std::env::var("DEBUG_LEVEL").unwrap_or("info".to_string());
+    let filter = EnvFilter::new(format!("actix_web=warn,actix_server=warn,{}", base_level));
+
+    let stackdriver = tracing_stackdriver::layer()
+        .with_cloud_trace(CloudTraceConfiguration {
+            project_id: project_id.clone(),
+        })
+        .with_filter(filter);
 
     let telemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     let subscriber = tracing_subscriber::registry()
-        .with(filter)
         .with(telemetry)
         .with(stackdriver);
 
@@ -17,11 +20,11 @@ pub fn init_logger(tracer: opentelemetry_sdk::trace::Tracer, project_id: String)
 }
 
 pub fn init_logger_without_trace() {
-    let filter = EnvFilter::from_env("DEBUG_LEVEL");
-    let stackdriver = tracing_stackdriver::layer();
+    let base_level = std::env::var("DEBUG_LEVEL").unwrap_or("info".to_string());
+    let filter = EnvFilter::new(format!("actix_web=warn,actix_server=warn,{}", base_level));
+    let stackdriver = tracing_stackdriver::layer().with_filter(filter);
     let telemetry = tracing_opentelemetry::layer();
     let subscriber = tracing_subscriber::registry()
-        .with(filter)
         .with(telemetry)
         .with(stackdriver);
 

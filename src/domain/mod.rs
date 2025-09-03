@@ -3,4 +3,4 @@ pub mod entities;
 pub mod ports;
 pub mod serializer;
 
-pub use core::{DomainError, DomainWrapper, Pagination};
+pub use core::{DomainError, DomainWrapper};

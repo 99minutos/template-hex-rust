@@ -1,20 +1,17 @@
 #![allow(dead_code)]
-use axum::{
-    http::StatusCode,
-    response::{IntoResponse, Response},
-    Json,
-};
+use actix_web::{http::StatusCode, HttpResponse, Responder};
 use opentelemetry::trace::TraceContextExt;
 use serde::Serialize;
-use serde_json::json;
+
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::domain::{DomainError, DomainWrapper};
 
+
+
 #[derive(Debug, Serialize)]
 pub struct GenericApiResponse {
-    pub success: bool,
     pub trace_id: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<serde_json::Value>,
@@ -24,10 +21,11 @@ pub struct GenericApiResponse {
     status: StatusCode,
 }
 
-impl IntoResponse for GenericApiResponse {
-    fn into_response(self) -> Response {
-        let body = Json(json!(self));
-        (self.status, body).into_response()
+impl Responder for GenericApiResponse {
+    type Body = actix_web::body::BoxBody;
+
+    fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse {
+        HttpResponse::build(self.status).json(self)
     }
 }
 
@@ -45,7 +43,6 @@ where
 
         match result {
             Ok(data) => Self {
-                success: true,
                 trace_id,
                 data: serde_json::to_value(data).ok(),
                 cause: None,
@@ -54,7 +51,6 @@ where
             Err(err) => {
                 let status = Self::status_for_error(&err);
                 Self {
-                    success: false,
                     trace_id,
                     data: err.data().cloned(),
                     cause: Some(err.message().to_string()),
@@ -65,19 +61,16 @@ where
     }
 }
 
-impl GenericApiResponse {
-    pub fn success<T: Serialize>(value: T) -> Self {
+impl From<DomainError> for GenericApiResponse {
+    fn from(err: DomainError) -> Self {
+        let trace_id = Self::current_trace_id();
+        let status = Self::status_for_error(&err);
+
         Self {
-            success: true,
-            trace_id: Span::current()
-                .context()
-                .span()
-                .span_context()
-                .trace_id()
-                .to_string(),
-            data: serde_json::to_value(value).ok(),
-            cause: None,
-            status: StatusCode::OK,
+            trace_id,
+            data: err.data().cloned(),
+            cause: Some(err.message().to_string()),
+            status,
         }
     }
 }
@@ -103,4 +96,22 @@ impl GenericApiResponse {
             DomainError::Unknown { .. } => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
+
+    pub fn from_error(err: &str, status: StatusCode) -> Self {
+        let trace_id = Span::current()
+            .context()
+            .span()
+            .span_context()
+            .trace_id()
+            .to_string();
+
+        Self {
+            trace_id,
+            data: None,
+            cause: Some(err.to_string()),
+            status,
+        }
+    }
 }
+
+
