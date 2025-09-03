@@ -4,11 +4,11 @@ use crate::domain::{entities, ports, DomainError, DomainWrapper};
 
 #[derive(Debug, Clone)]
 pub struct ExampleService {
-    example_repo: Arc<Box<dyn ports::PortExampleRepo>>,
+    example_repo: Arc<dyn ports::PortExampleRepo>,
 }
 
 impl ExampleService {
-    pub fn new(example_repo: Arc<Box<dyn ports::PortExampleRepo>>) -> Self {
+    pub fn new(example_repo: Arc<dyn ports::PortExampleRepo>) -> Self {
         ExampleService { example_repo }
     }
 

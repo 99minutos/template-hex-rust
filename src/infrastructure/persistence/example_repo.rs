@@ -1,4 +1,4 @@
-use std::sync::Arc;
+
 
 use async_trait::async_trait;
 use bson::{oid::ObjectId, DateTime};
@@ -14,11 +14,11 @@ pub struct ExampleRepository {
 }
 
 impl ExampleRepository {
-    pub async fn new(client: &mongodb::Database) -> Arc<Box<dyn ports::PortExampleRepo>> {
+    pub async fn new(client: &mongodb::Database) -> Self {
         let collection = client.collection::<entities::Example>("examples");
         let a = Self { db: collection };
         a.create_index().await;
-        Arc::new(Box::new(a))
+        a
     }
 
     async fn create_index(&self) {

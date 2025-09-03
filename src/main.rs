@@ -42,7 +42,8 @@ async fn main() -> std::io::Result<()> {
         .await
         .expect("Failed to init Mongo");
 
-    let event_repository = ExampleRepository::new(&mongodb.get_database()).await;
+    let event_repository: Arc<dyn crate::domain::ports::PortExampleRepo> =
+        Arc::new(ExampleRepository::new(&mongodb.get_database()).await);
 
     let context = AppContext {
         example_srv: Arc::new(ExampleService::new(event_repository)),
