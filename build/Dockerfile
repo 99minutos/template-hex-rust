@@ -1,7 +1,7 @@
 ####################################################################################################
 ## Builder Stage
 ####################################################################################################
-FROM rust:latest AS builder
+FROM rust:bookworm AS builder
 RUN update-ca-certificates
 
 ENV USER=app
@@ -16,11 +16,11 @@ RUN adduser \
     --uid "${UID}" \
     "${USER}"
 
-WORKDIR /app
+# RUN apt-get update && \
+#    apt-get install -y protobuf-compiler jq && \
+#    rm -rf /var/lib/apt/lists/*
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends jq && \
-    rm -rf /var/lib/apt/lists/*
+WORKDIR /app
 
 COPY Cargo.toml Cargo.lock ./
 
@@ -29,13 +29,7 @@ COPY . .
 RUN cargo build --release
 
 
-RUN BINARY_SERVICE_NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.packages[].targets[] | select( .kind | map(. == "bin") | any ) | .name' | head -n 1) && \
-    if [ -z "${BINARY_SERVICE_NAME}" ]; then \
-    echo "Error: Could not determine binary name from cargo metadata." >&2; \
-    exit 1; \
-    fi && \
-    echo "Identified binary for service: ${BINARY_SERVICE_NAME}" && \
-    SOURCE_BINARY_PATH="/app/target/release/${BINARY_SERVICE_NAME}" && \
+RUN SOURCE_BINARY_PATH="/app/target/release/service" && \
     DEST_BINARY_PATH="/app/service" && \
     echo "Copying binary from ${SOURCE_BINARY_PATH} to ${DEST_BINARY_PATH}" && \
     cp "${SOURCE_BINARY_PATH}" "${DEST_BINARY_PATH}" && \
@@ -46,7 +40,7 @@ RUN BINARY_SERVICE_NAME=$(cargo metadata --no-deps --format-version 1 | jq -r '.
 ####################################################################################################
 ## Final image Stage
 ####################################################################################################
-FROM gcr.io/distroless/cc
+FROM gcr.io/distroless/cc-debian12
 USER app:app
 WORKDIR /app
 
