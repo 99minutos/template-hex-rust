@@ -1,6 +1,6 @@
 pub mod dto;
+pub mod error;
 pub mod handlers;
-// mod parser;
 pub mod response;
 pub mod routes;
 

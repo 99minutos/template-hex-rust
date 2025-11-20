@@ -1,51 +1,37 @@
 #![allow(dead_code)]
 
-use core::fmt;
-
 use serde::Serialize;
 use serde_json::Value;
+use thiserror::Error;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum DatabaseKind {
+    #[error("register not found")]
     NotFound,
+    #[error("register duplicate")]
     Duplicate,
+    #[error("Database error")]
     Error,
 }
 
-impl fmt::Display for DatabaseKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            DatabaseKind::NotFound => write!(f, "register not found"),
-            DatabaseKind::Duplicate => write!(f, "register duplicate"),
-            DatabaseKind::Error => write!(f, "Database error"),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum ErrorKind {
+    #[error("not found")]
     NotFound,
+    #[error("conflict")]
     Conflict,
+    #[error("validation error")]
     Validation,
-    Database(DatabaseKind),
+    #[error("database error: {0}")]
+    Database(#[from] DatabaseKind),
+    #[error("unauthorized")]
     Unauthorized,
+    #[error("unknown error")]
     Unknown,
 }
 
-impl fmt::Display for ErrorKind {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            ErrorKind::NotFound => write!(f, "not found"),
-            ErrorKind::Conflict => write!(f, "conflict"),
-            ErrorKind::Validation => write!(f, "validation error"),
-            ErrorKind::Database(kind) => write!(f, "database error: {}", kind),
-            ErrorKind::Unauthorized => write!(f, "unauthorized"),
-            ErrorKind::Unknown => write!(f, "unknown error"),
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, Error)]
+#[error("{kind}: {message}")]
 pub struct DomainError {
     kind: ErrorKind,
     message: String,
@@ -86,15 +72,3 @@ impl DomainError {
         self.kind == ErrorKind::Database(DatabaseKind::Duplicate)
     }
 }
-
-impl fmt::Display for DomainError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}: {}", self.kind, self.message)?;
-        if let Some(data) = &self.data {
-            write!(f, " (Context: {})", data)?;
-        }
-        Ok(())
-    }
-}
-
-impl std::error::Error for DomainError {}
