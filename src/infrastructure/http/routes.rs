@@ -4,7 +4,7 @@ use axum::{
     routing::{get, post},
     Router,
 };
-use tower_http::{cors::CorsLayer, trace::TraceLayer};
+use tower_http::{compression::CompressionLayer, cors::CorsLayer, trace::TraceLayer};
 
 use crate::{infrastructure::http::handlers::handler_example, AppContext};
 
@@ -20,6 +20,7 @@ pub fn app(context: Arc<AppContext>) -> Router {
         .route("/healthz", get(|| async { "ok" }))
         .nest("/api/v1", api_routes)
         .layer(TraceLayer::new_for_http())
+        .layer(CompressionLayer::new())
         .layer(CorsLayer::permissive())
         .with_state(context)
 }

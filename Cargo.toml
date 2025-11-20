@@ -10,7 +10,11 @@ opt-level = 3
 [dependencies]
 axum = "0.7"
 tower = { version = "0.5", features = ["util"] }
-tower-http = { version = "0.6", features = ["cors", "trace"] }
+tower-http = { version = "0.6", features = [
+    "cors",
+    "trace",
+    "compression-gzip",
+] }
 anyhow = "1"
 thiserror = "1"
 base64 = "0"
