@@ -3,10 +3,8 @@ use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer};
 
 pub fn init_logger(tracer: opentelemetry_sdk::trace::Tracer, project_id: String) {
     let base_level = std::env::var("DEBUG_LEVEL").unwrap_or("info".to_string());
-    // Filter out noisy spans from low-level libraries (h2, hyper, tokio_util)
-    // that generate "poll" and "FramedWrite::flush" spans.
     let filter = EnvFilter::new(format!(
-        "h2=info,hyper=info,tokio_util=info,tower_http=warn,axum=warn,{}",
+        "h2=warn,hyper=warn,tokio_util=warn,tower_http=warn,axum=warn,{}",
         base_level
     ));
 
@@ -27,7 +25,7 @@ pub fn init_logger(tracer: opentelemetry_sdk::trace::Tracer, project_id: String)
 pub fn init_logger_without_trace() {
     let base_level = std::env::var("DEBUG_LEVEL").unwrap_or("info".to_string());
     let filter = EnvFilter::new(format!(
-        "h2=info,hyper=info,tokio_util=info,tower_http=warn,axum=warn,{}",
+        "h2=warn,hyper=warn,tokio_util=warn,tower_http=warn,axum=warn,{}",
         base_level
     ));
     let stackdriver = tracing_stackdriver::layer().with_filter(filter);
