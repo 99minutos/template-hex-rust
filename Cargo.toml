@@ -8,9 +8,10 @@ lto = true
 opt-level = 3
 
 [dependencies]
-actix-web = "4"
-actix-cors = "0.7"
-tracing-actix-web = "0.7"
+axum = "0.7"
+tower = { version = "0.5", features = ["util"] }
+tower-http = { version = "0.6", features = ["cors", "trace"] }
+anyhow = "1"
 base64 = "0"
 bson = { version = "2", features = ["chrono-0_4"] }
 chrono = { version = "0", features = ["serde"] }

@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::domain::{entities, ports, DomainError, DomainWrapper};
+use crate::domain::{self, entities, ports, DomainError, DomainWrapper};
 
 #[derive(Debug, Clone)]
 pub struct ExampleService {
@@ -19,7 +19,10 @@ impl ExampleService {
 
     #[tracing::instrument(skip_all)]
     pub async fn get_examples_with_error(&self) -> DomainWrapper<Vec<entities::Example>> {
-        Err(DomainError::transient("example error".to_string()))
+        Err(domain::DomainError::new(
+            domain::ErrorKind::Conflict,
+            format!("custom error for example"),
+        ))
     }
 
     #[tracing::instrument(skip_all)]

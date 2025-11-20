@@ -3,9 +3,7 @@ use std::sync::Arc;
 use dotenv::dotenv;
 use implementation::ExampleService;
 use infrastructure::{
-    http::HttpProvider,
-    persistence::ExampleRepository,
-    providers::MongoProvider,
+    http::HttpProvider, persistence::ExampleRepository, providers::MongoProvider,
 };
 
 mod domain;
@@ -26,7 +24,7 @@ mod app_context {
 
 pub use app_context::AppContext;
 
-#[actix_web::main]
+#[tokio::main]
 async fn main() -> std::io::Result<()> {
     dotenv().ok();
 
@@ -38,15 +36,22 @@ async fn main() -> std::io::Result<()> {
         tools::init_logger_without_trace()
     }
 
+    // initialize MongoDB Provider
     let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone())
         .await
         .expect("Failed to init Mongo");
 
-    let event_repository: Arc<dyn crate::domain::ports::PortExampleRepo> =
-        Arc::new(ExampleRepository::new(&mongodb.get_database()).await);
+    // initialize repositories async
+    let database = mongodb.get_database();
+    let (example_rep, _example_rep_2) = tokio::join!(
+        ExampleRepository::new(&database),
+        ExampleRepository::new(&database)
+    );
+
+    // initialize context
 
     let context = AppContext {
-        example_srv: Arc::new(ExampleService::new(event_repository)),
+        example_srv: Arc::new(ExampleService::new(example_rep.clone())),
     };
 
     HttpProvider::start_server(envs.port, context).await

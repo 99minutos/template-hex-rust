@@ -1,14 +1,15 @@
 #![allow(dead_code)]
-use actix_web::{http::StatusCode, HttpResponse, Responder};
+use axum::{
+    http::StatusCode,
+    response::{IntoResponse, Response},
+    Json,
+};
 use opentelemetry::trace::TraceContextExt;
 use serde::Serialize;
-
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
-use crate::domain::{DomainError, DomainWrapper};
-
-
+use crate::domain::{self, DomainError, DomainWrapper};
 
 #[derive(Debug, Serialize)]
 pub struct GenericApiResponse {
@@ -21,11 +22,9 @@ pub struct GenericApiResponse {
     status: StatusCode,
 }
 
-impl Responder for GenericApiResponse {
-    type Body = actix_web::body::BoxBody;
-
-    fn respond_to(self, _req: &actix_web::HttpRequest) -> HttpResponse {
-        HttpResponse::build(self.status).json(self)
+impl IntoResponse for GenericApiResponse {
+    fn into_response(self) -> Response {
+        (self.status, Json(self)).into_response()
     }
 }
 
@@ -87,13 +86,14 @@ impl GenericApiResponse {
     }
 
     #[inline]
-    fn status_for_error(err: &DomainError) -> StatusCode {
-        match err {
-            DomainError::NotFound { .. } => StatusCode::NOT_FOUND,
-            DomainError::Conflict { .. } => StatusCode::CONFLICT,
-            DomainError::Validation { .. } => StatusCode::UNPROCESSABLE_ENTITY,
-            DomainError::Transient { .. } => StatusCode::SERVICE_UNAVAILABLE,
-            DomainError::Unknown { .. } => StatusCode::INTERNAL_SERVER_ERROR,
+    fn status_for_error(err: &domain::DomainError) -> StatusCode {
+        match err.kind() {
+            domain::ErrorKind::NotFound => StatusCode::NOT_FOUND,
+            domain::ErrorKind::Conflict => StatusCode::CONFLICT,
+            domain::ErrorKind::Validation => StatusCode::UNPROCESSABLE_ENTITY,
+            domain::ErrorKind::Database(_) => StatusCode::SERVICE_UNAVAILABLE,
+            domain::ErrorKind::Unauthorized => StatusCode::UNAUTHORIZED,
+            domain::ErrorKind::Unknown => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -113,5 +113,3 @@ impl GenericApiResponse {
         }
     }
 }
-
-

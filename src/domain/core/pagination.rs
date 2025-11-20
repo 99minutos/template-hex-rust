@@ -3,8 +3,8 @@ use valuable::Valuable;
 
 #[derive(Debug, Serialize, Deserialize, Valuable)]
 pub struct Pagination {
-    pub page: Option<u64>,
-    pub limit: Option<u64>,
+    pub page: Option<i64>,
+    pub limit: Option<i64>,
 }
 
 impl Pagination {
@@ -15,13 +15,14 @@ impl Pagination {
         let page = self.page.unwrap_or(0);
         let limit = self.limit.unwrap_or(10);
 
-        page * limit
+        (page * limit) as u64
     }
+
     pub fn limit(&self) -> i64 {
         if self.limit.is_none() {
             return 10;
         }
-        self.limit.unwrap_or(10) as i64
+        self.limit.unwrap_or(10)
     }
 }
 
