@@ -1,28 +1,17 @@
-use std::sync::Arc;
-
 use dotenv::dotenv;
 use implementation::ExampleService;
 use infrastructure::{
     http::HttpProvider, persistence::ExampleRepository, providers::MongoProvider,
 };
 
+mod ctx;
 mod domain;
 mod envs;
 mod implementation;
 mod infrastructure;
 mod tools;
 
-mod app_context {
-    use crate::implementation::ExampleService;
-    use std::sync::Arc;
-
-    #[derive(Debug, Clone)]
-    pub struct AppContext {
-        pub example_srv: Arc<ExampleService>,
-    }
-}
-
-pub use app_context::AppContext;
+pub use ctx::AppContext;
 
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
@@ -51,7 +40,7 @@ async fn main() -> std::io::Result<()> {
     // initialize context
 
     let context = AppContext {
-        example_srv: Arc::new(ExampleService::new(example_rep.clone())),
+        example_srv: ExampleService::new(example_rep),
     };
 
     HttpProvider::start_server(envs.port, context).await

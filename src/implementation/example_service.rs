@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::domain::{self, entities, ports, DomainError, DomainWrapper};
+use crate::domain::{self, entities, ports, DomainWrapper};
 
 #[derive(Debug, Clone)]
 pub struct ExampleService {
