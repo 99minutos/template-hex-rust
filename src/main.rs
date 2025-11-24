@@ -1,7 +1,9 @@
 use dotenv::dotenv;
-use implementation::ExampleService;
+use implementation::{Example2Service, ExampleService};
 use infrastructure::{
-    http::HttpProvider, persistence::ExampleRepository, providers::MongoProvider,
+    http::HttpProvider,
+    persistence::{Example2Repository, ExampleRepository},
+    providers::MongoProvider,
 };
 
 mod ctx;
@@ -32,15 +34,17 @@ async fn main() -> std::io::Result<()> {
 
     // initialize repositories async
     let database = mongodb.get_database();
-    let (example_rep, _example_rep_2) = tokio::join!(
+
+    let (example_rep, example2_rep) = tokio::join!(
         ExampleRepository::new(&database),
-        ExampleRepository::new(&database)
+        Example2Repository::new(&database)
     );
 
     // initialize context
 
     let context = AppContext {
         example_srv: ExampleService::new(example_rep),
+        example2_srv: Example2Service::new(example2_rep),
     };
 
     HttpProvider::start_server(envs.port, context).await

@@ -1,7 +1,6 @@
-use std::sync::Arc;
 
 pub struct MongoProvider {
-    database: Arc<mongodb::Database>,
+    database: mongodb::Database,
 }
 
 impl MongoProvider {
@@ -11,13 +10,12 @@ impl MongoProvider {
 
         _ = database_conn.run_command(bson::doc! {"ping": 1}).await?;
 
-        let arc_database = Arc::new(database_conn);
         Ok(MongoProvider {
-            database: arc_database,
+            database: database_conn,
         })
     }
 
-    pub fn get_database(&self) -> Arc<mongodb::Database> {
+    pub fn get_database(&self) -> mongodb::Database {
         self.database.clone()
     }
 }

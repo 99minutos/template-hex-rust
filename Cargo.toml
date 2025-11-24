@@ -6,9 +6,11 @@ edition = "2021"
 [profile.release]
 lto = true
 opt-level = 3
+strip = true
+codegen-units = 1
 
 [dependencies]
-axum = "0.7"
+axum = "0.8"
 tower = { version = "0.5", features = ["util"] }
 tower-http = { version = "0.6", features = [
     "cors",

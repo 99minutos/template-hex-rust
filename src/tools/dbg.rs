@@ -1,5 +1,5 @@
 use tracing_stackdriver::CloudTraceConfiguration;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer};
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter};
 
 pub fn init_logger(tracer: opentelemetry_sdk::trace::Tracer, project_id: String) {
     let base_level = std::env::var("DEBUG_LEVEL").unwrap_or("info".to_string());

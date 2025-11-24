@@ -5,30 +5,71 @@ use axum::{
     Json,
 };
 use opentelemetry::trace::TraceContextExt;
-use serde::Serialize;
+use serde::{ser::SerializeStruct, Serialize, Serializer};
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
 
 use crate::domain::{self, DomainError, DomainWrapper};
 
-#[derive(Debug, Serialize)]
-pub struct GenericApiResponse {
-    pub trace_id: String,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub data: Option<serde_json::Value>,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub cause: Option<String>,
-    #[serde(skip_serializing)]
-    status: StatusCode,
+#[derive(Debug)]
+pub enum GenericApiResponse<T> {
+    Ok {
+        trace_id: String,
+        data: T,
+        status: StatusCode,
+    },
+    Err {
+        trace_id: String,
+        data: Option<serde_json::Value>,
+        cause: Option<String>,
+        status: StatusCode,
+    },
 }
 
-impl IntoResponse for GenericApiResponse {
-    fn into_response(self) -> Response {
-        (self.status, Json(self)).into_response()
+impl<T> Serialize for GenericApiResponse<T>
+where
+    T: Serialize,
+{
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut state = serializer.serialize_struct("GenericApiResponse", 3)?;
+        match self {
+            Self::Ok { trace_id, data, .. } => {
+                state.serialize_field("trace_id", trace_id)?;
+                state.serialize_field("data", data)?;
+                state.serialize_field("cause", &None::<String>)?;
+            }
+            Self::Err {
+                trace_id,
+                data,
+                cause,
+                ..
+            } => {
+                state.serialize_field("trace_id", trace_id)?;
+                state.serialize_field("data", data)?;
+                state.serialize_field("cause", cause)?;
+            }
+        }
+        state.end()
     }
 }
 
-impl<T> From<DomainWrapper<T>> for GenericApiResponse
+impl<T> IntoResponse for GenericApiResponse<T>
+where
+    T: Serialize,
+{
+    fn into_response(self) -> Response {
+        let status = match &self {
+            Self::Ok { status, .. } => *status,
+            Self::Err { status, .. } => *status,
+        };
+        (status, Json(self)).into_response()
+    }
+}
+
+impl<T> From<DomainWrapper<T>> for GenericApiResponse<T>
 where
     T: Serialize,
 {
@@ -41,15 +82,14 @@ where
             .to_string();
 
         match result {
-            Ok(data) => Self {
+            Ok(data) => Self::Ok {
                 trace_id,
-                data: serde_json::to_value(data).ok(),
-                cause: None,
+                data,
                 status: StatusCode::OK,
             },
             Err(err) => {
                 let status = Self::status_for_error(&err);
-                Self {
+                Self::Err {
                     trace_id,
                     data: err.data().cloned(),
                     cause: Some(err.message().to_string()),
@@ -60,12 +100,12 @@ where
     }
 }
 
-impl From<DomainError> for GenericApiResponse {
+impl From<DomainError> for GenericApiResponse<()> {
     fn from(err: DomainError) -> Self {
         let trace_id = Self::current_trace_id();
         let status = Self::status_for_error(&err);
 
-        Self {
+        Self::Err {
             trace_id,
             data: err.data().cloned(),
             cause: Some(err.message().to_string()),
@@ -74,7 +114,7 @@ impl From<DomainError> for GenericApiResponse {
     }
 }
 
-impl GenericApiResponse {
+impl<T> GenericApiResponse<T> {
     #[inline]
     fn current_trace_id() -> String {
         Span::current()
@@ -96,16 +136,13 @@ impl GenericApiResponse {
             domain::ErrorKind::Unknown => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
+}
 
+impl GenericApiResponse<()> {
     pub fn from_error(err: &str, status: StatusCode) -> Self {
-        let trace_id = Span::current()
-            .context()
-            .span()
-            .span_context()
-            .trace_id()
-            .to_string();
+        let trace_id = Self::current_trace_id();
 
-        Self {
+        Self::Err {
             trace_id,
             data: None,
             cause: Some(err.to_string()),

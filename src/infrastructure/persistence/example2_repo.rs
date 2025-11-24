@@ -9,13 +9,13 @@ use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 use crate::domain::{self, entities, ports, DomainWrapper};
 
 #[derive(Debug, Clone)]
-pub struct ExampleRepository {
-    db: Collection<entities::Example>,
+pub struct Example2Repository {
+    db: Collection<entities::Example2>,
 }
 
-impl ExampleRepository {
-    pub async fn new(client: &mongodb::Database) -> Arc<dyn ports::PortExampleRepo> {
-        let collection = client.collection::<entities::Example>("examples");
+impl Example2Repository {
+    pub async fn new(client: &mongodb::Database) -> Arc<dyn ports::PortExample2Repo> {
+        let collection = client.collection::<entities::Example2>("example2s");
         let a = Self { db: collection };
         a.create_index().await;
         Arc::new(a)
@@ -51,41 +51,41 @@ impl ExampleRepository {
 }
 
 #[async_trait]
-impl ports::PortExampleRepo for ExampleRepository {
+impl ports::PortExample2Repo for Example2Repository {
     #[tracing::instrument(skip_all)]
-    async fn all(&self) -> DomainWrapper<Vec<entities::Example>> {
+    async fn all(&self) -> DomainWrapper<Vec<entities::Example2>> {
         let filter = doc! {};
 
         match self.db.find(filter).await {
             Ok(cursor) => {
-                let events: Vec<entities::Example> = cursor.try_collect().await.map_err(|e| {
+                let events: Vec<entities::Example2> = cursor.try_collect().await.map_err(|e| {
                     domain::DomainError::new(
                         domain::ErrorKind::Database(domain::DatabaseKind::Error),
-                        format!("Failed to get examples: {}", e),
+                        format!("Failed to get example2s: {}", e),
                     )
                 })?;
                 Ok(events)
             }
             Err(e) => Err(domain::DomainError::new(
                 domain::ErrorKind::Database(domain::DatabaseKind::Error),
-                format!("Failed to fetch example: {}", e),
+                format!("Failed to fetch example2: {}", e),
             )),
         }
     }
 
     #[tracing::instrument(skip_all)]
-    async fn insert(&self, mut example: entities::Example) -> DomainWrapper<entities::Example> {
+    async fn insert(&self, mut example2: entities::Example2) -> DomainWrapper<entities::Example2> {
         let now = Utc::now();
-        example.id = ObjectId::new();
-        example.created_at = DateTime::from_chrono(now);
-        example.updated_at = DateTime::from_chrono(now);
+        example2.id = ObjectId::new();
+        example2.created_at = DateTime::from_chrono(now);
+        example2.updated_at = DateTime::from_chrono(now);
 
-        let result = self.db.insert_one(&example).await;
+        let result = self.db.insert_one(&example2).await;
         match result {
-            Ok(_) => Ok(example),
+            Ok(_) => Ok(example2),
             Err(e) => Err(domain::DomainError::new(
                 domain::ErrorKind::Database(domain::DatabaseKind::Error),
-                format!("Failed to insert example: {}", e),
+                format!("Failed to insert example2: {}", e),
             )),
         }
     }
