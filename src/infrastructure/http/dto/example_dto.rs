@@ -1,11 +1,11 @@
-use super::OutputResponse;
-use bson::oid::ObjectId;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use validator::Validate;
 
+use super::{InputRequest, OutputResponse};
 use crate::domain::entities::Example;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize)]
 pub struct ExampleDto {
     pub id: String,
     pub name: String,
@@ -14,7 +14,6 @@ pub struct ExampleDto {
 }
 
 impl OutputResponse for ExampleDto {}
-
 
 impl From<Example> for ExampleDto {
     fn from(example: Example) -> Self {
@@ -27,13 +26,14 @@ impl From<Example> for ExampleDto {
     }
 }
 
-impl From<ExampleDto> for Example {
-    fn from(example_dto: ExampleDto) -> Self {
-        Self {
-            id: ObjectId::parse_str(&example_dto.id).unwrap(),
-            name: example_dto.name,
-            created_at: bson::DateTime::from_chrono(example_dto.created_at),
-            updated_at: bson::DateTime::from_chrono(example_dto.updated_at),
-        }
-    }
+#[derive(Debug, Deserialize, Validate)]
+pub struct CreateExampleRequest {
+    #[validate(length(
+        min = 3,
+        max = 100,
+        message = "name must be between 3 and 100 characters"
+    ))]
+    pub name: String,
 }
+
+impl InputRequest for CreateExampleRequest {}

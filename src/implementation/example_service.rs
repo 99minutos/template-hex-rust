@@ -31,4 +31,11 @@ impl ExampleService {
         example.name = format!("example-{}", rand::random::<u32>());
         self.example_repo.insert(example).await
     }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn create_example(&self, name: String) -> DomainWrapper<entities::Example> {
+        let mut example = entities::Example::default();
+        example.name = name;
+        self.example_repo.insert(example).await
+    }
 }

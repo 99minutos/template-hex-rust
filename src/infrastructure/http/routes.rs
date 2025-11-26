@@ -14,6 +14,7 @@ use crate::{
 pub fn app(context: Arc<AppContext>) -> Router {
     let example_routes = Router::new()
         .route("/", get(handler_example::get_examples))
+        .route("/", post(handler_example::create_example))
         .route("/random", post(handler_example::add_random_example))
         .route("/error", get(handler_example::get_examples_with_error));
 

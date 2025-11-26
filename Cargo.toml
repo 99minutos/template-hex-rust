@@ -50,3 +50,5 @@ rand = "0.9"
 async-trait = "0.1"
 valuable = { version = "0.1", features = ["derive"] }
 google-cloud-tasks-v2 = "0.5"
+uuid = { version = "1.18.1", features = ["v4"] }
+validator = { version = "0.20", features = ["derive"] }

@@ -4,7 +4,12 @@ use axum::{extract::State, response::IntoResponse};
 
 use crate::{
     infrastructure::http::{
-        dto::example_dto::ExampleDto, error::AppError, response::GenericApiResponse,
+        dto::{
+            example_dto::{CreateExampleRequest, ExampleDto},
+            ValidatedJson,
+        },
+        error::AppError,
+        response::GenericApiResponse,
     },
     AppContext,
 };
@@ -21,6 +26,16 @@ pub async fn get_examples(
         .collect::<Vec<ExampleDto>>();
 
     Ok(GenericApiResponse::from(Ok(result)))
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn create_example(
+    State(ctx): State<Arc<AppContext>>,
+    ValidatedJson(payload): ValidatedJson<CreateExampleRequest>,
+) -> Result<impl IntoResponse, AppError> {
+    let result = ctx.example_srv.create_example(payload.name).await?;
+
+    Ok(GenericApiResponse::from(Ok(ExampleDto::from(result))))
 }
 
 #[tracing::instrument(skip_all)]
