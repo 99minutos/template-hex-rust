@@ -16,7 +16,6 @@ pub fn get() -> &'static EnvConfig {
 
 impl EnvConfig {
     fn new() -> Self {
-        dotenv::dotenv().ok();
         Self {
             port: std::env::var("PORT")
                 .unwrap_or("8080".to_string())
