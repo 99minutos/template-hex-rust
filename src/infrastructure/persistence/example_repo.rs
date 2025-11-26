@@ -6,7 +6,7 @@ use chrono::Utc;
 use futures::TryStreamExt;
 use mongodb::{bson::doc, options::IndexOptions, Collection, IndexModel};
 
-use crate::domain::{self, entities, ports, DomainWrapper};
+use crate::domain::{self, entities, ports, DomainWrapper, Paginated, Pagination};
 
 #[derive(Debug, Clone)]
 pub struct ExampleRepository {
@@ -71,6 +71,48 @@ impl ports::PortExampleRepo for ExampleRepository {
                 format!("Failed to fetch example: {}", e),
             )),
         }
+    }
+
+    #[tracing::instrument(skip_all)]
+    async fn find_paginated(
+        &self,
+        pagination: &Pagination,
+    ) -> DomainWrapper<Paginated<entities::Example>> {
+        let filter = doc! {};
+
+        let total = self.db.count_documents(filter.clone()).await.map_err(|e| {
+            domain::DomainError::new(
+                domain::ErrorKind::Database(domain::DatabaseKind::Error),
+                format!("Failed to count examples: {}", e),
+            )
+        })?;
+
+        let options = mongodb::options::FindOptions::builder()
+            .skip(pagination.skip())
+            .limit(pagination.limit as i64)
+            .sort(doc! { "created_at": -1 })
+            .build();
+
+        let cursor = self
+            .db
+            .find(filter)
+            .with_options(options)
+            .await
+            .map_err(|e| {
+                domain::DomainError::new(
+                    domain::ErrorKind::Database(domain::DatabaseKind::Error),
+                    format!("Failed to fetch examples: {}", e),
+                )
+            })?;
+
+        let data: Vec<entities::Example> = cursor.try_collect().await.map_err(|e| {
+            domain::DomainError::new(
+                domain::ErrorKind::Database(domain::DatabaseKind::Error),
+                format!("Failed to collect examples: {}", e),
+            )
+        })?;
+
+        Ok(Paginated::new(data, total, pagination))
     }
 
     #[tracing::instrument(skip_all)]

@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 use super::{InputRequest, OutputResponse};
-use crate::domain::entities::Example;
+use crate::domain::{entities::Example, Pagination};
 
 #[derive(Debug, Serialize)]
 pub struct ExampleDto {
@@ -37,3 +37,24 @@ pub struct CreateExampleRequest {
 }
 
 impl InputRequest for CreateExampleRequest {}
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct ListExamplesQuery {
+    #[validate(range(min = 0))]
+    #[serde(default)]
+    pub page: u64,
+
+    #[validate(range(min = 1, max = 100))]
+    #[serde(default = "default_limit")]
+    pub limit: u64,
+}
+
+fn default_limit() -> u64 {
+    20
+}
+
+impl From<ListExamplesQuery> for Pagination {
+    fn from(q: ListExamplesQuery) -> Self {
+        Pagination::new(q.page, q.limit)
+    }
+}

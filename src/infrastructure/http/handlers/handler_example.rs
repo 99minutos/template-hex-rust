@@ -1,11 +1,15 @@
 use std::sync::Arc;
 
-use axum::{extract::State, response::IntoResponse};
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+};
 
 use crate::{
+    domain::Pagination,
     infrastructure::http::{
         dto::{
-            example_dto::{CreateExampleRequest, ExampleDto},
+            example_dto::{CreateExampleRequest, ExampleDto, ListExamplesQuery},
             ValidatedJson,
         },
         error::AppError,
@@ -59,4 +63,15 @@ pub async fn get_examples_with_error(
         .collect::<Vec<ExampleDto>>();
 
     Ok(GenericApiResponse::from(Ok(result)))
+}
+
+#[tracing::instrument(skip_all)]
+pub async fn get_examples_paginated(
+    State(ctx): State<Arc<AppContext>>,
+    Query(query): Query<ListExamplesQuery>,
+) -> Result<impl IntoResponse, AppError> {
+    let pagination = Pagination::from(query);
+    let result = ctx.example_srv.get_examples_paginated(&pagination).await?;
+
+    Ok(GenericApiResponse::from(Ok(result.map(ExampleDto::from))))
 }

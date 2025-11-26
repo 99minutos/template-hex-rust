@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use crate::domain::{self, entities, ports, DomainWrapper};
+use crate::domain::{self, entities, ports, DomainWrapper, Paginated, Pagination};
 
 #[derive(Debug, Clone)]
 pub struct ExampleService {
@@ -37,5 +37,13 @@ impl ExampleService {
         let mut example = entities::Example::default();
         example.name = name;
         self.example_repo.insert(example).await
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn get_examples_paginated(
+        &self,
+        pagination: &Pagination,
+    ) -> DomainWrapper<Paginated<entities::Example>> {
+        self.example_repo.find_paginated(pagination).await
     }
 }
