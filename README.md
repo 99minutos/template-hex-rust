@@ -1,95 +1,124 @@
 # Rust Microservice Template
 
-This repository serves as a production-ready template for building scalable and maintainable microservices in Rust. It is built upon the principles of **Clean Architecture** (also known as Hexagonal or Ports and Adapters Architecture) to ensure a clear separation of concerns, making the codebase easy to test, evolve, and reason about.
+Este proyecto es una plantilla profesional, robusta y escalable para desarrollar microservicios en Rust, diseñada bajo los principios de **Arquitectura Hexagonal (Clean Architecture)**.
 
-## Getting Started
+Su objetivo es estandarizar el desarrollo, facilitar el mantenimiento y asegurar que la lógica de negocio permanezca desacoplada de la infraestructura.
 
-### Prerequisites
+## 🏗 Arquitectura
 
-- [Rust and Cargo](https://www.rust-lang.org/tools/install)
+El proyecto sigue una estricta separación de responsabilidades:
 
-### 1. Configuration
+### 1. Domain (`src/domain`)
 
-The service is configured using environment variables. For local development, you can create a `.env` file in the project root.
+Es el **núcleo** del software. Aquí residen las reglas de negocio, las estructuras de datos (Entidades) y las definiciones de contratos (Puertos/Traits).
 
-Create a `.env` file by copying the example:
+- **Regla de Oro**: No debe depender de ninguna otra capa (ni `infrastructure` ni `implementation`).
 
-```sh
-cp .env.example .env
+### 2. Implementation (`src/implementation`)
+
+Contiene la **Lógica de Negocio** (Casos de Uso). Aquí se definen los "Servicios" que orquestan las operaciones.
+
+- Usa los objetos del `Domain`.
+- Usa los `Ports` definidos en el `Domain` para comunicarse con el mundo exterior (BD, APIs), sin saber _cómo_ están implementados.
+
+### 3. Infrastructure (`src/infrastructure`)
+
+Contiene los **Detalles Técnicos**. Aquí es donde la "magia" real ocurre:
+
+- **Persistence**: Implementación de repositorios (MongoDB, Postgres, etc.).
+- **HTTP**: Controladores (Handlers) de la API REST, DTOs y configuración de rutas.
+- **Providers**: Clientes para servicios externos (Redis, APIs de terceros).
+
+### 4. Composition Root (`src/main.rs`)
+
+Es el punto de entrada. Aquí se cargan las configuraciones, se instancian los repositorios y servicios, y se inyectan las dependencias en el `AppContext`.
+
+---
+
+## 🚀 Inicio Rápido
+
+### Prerrequisitos
+
+- [Rust](https://www.rust-lang.org/tools/install) (Stable)
+- Docker & Docker Compose (opcional, para levantar MongoDB localmente)
+
+### Configuración
+
+1.  **Variables de Entorno**:
+    Crea un archivo `.env` en la raíz del proyecto basado en las necesidades definidades en `src/envs.rs`.
+
+    ```bash
+    PORT=8080
+    SERVICE_NAME=my-service
+    MONGO_URL=mongodb://localhost:27017
+    MONGO_DB=my_database
+    DEBUG_LEVEL=info
+    ```
+
+2.  **Base de Datos**:
+    Asegúrate de tener una instancia de MongoDB corriendo.
+
+### Ejecución
+
+Modo desarrollo (recomendado usar `cargo-watch`):
+
+```bash
+cargo watch -x run
 ```
 
-Then, fill in the required variables in your new `.env` file:
+Ejecución estándar:
 
-```dotenv
-# .env
-
-# Server Configuration
-PORT=8080
-
-# Service Metadata for Tracing
-SERVICE_NAME="my-hex-service"
-PROJECT_ID="your-gcp-project-id" # Required for Google Cloud logging/tracing
-
-# MongoDB Configuration
-MONGO_URL="mongodb://localhost:27017"
-MONGO_DB="my_database"
-
-# Log Level (TRACE, DEBUG, INFO, WARN, ERROR)
-DEBUG_LEVEL="INFO"
-```
-
-### 2. Running the Service
-
-Once your `.env` file is configured, you can run the application with Cargo:
-
-```sh
+```bash
 cargo run
 ```
 
-The server will start, and you should see a log message indicating it is listening on the configured port.
+---
 
-## Key Features & Concepts
+## 🛠 Guía de Desarrollo
 
-#### Log Levels
+Para agregar una nueva funcionalidad (ej. "Usuarios"), sigue este flujo estricto para mantener la arquitectura limpia:
 
-These are the log levels, ordered from least to most severe.
+### Paso 1: Domain
 
+Define **qué** es un usuario y **qué** necesitamos hacer con él.
+
+- Crear `src/domain/entities/user.rs` (Struct `User`).
+- Crear `src/domain/ports/user_port.rs` (Trait `PortUserRepo`).
+
+### Paso 2: Implementation
+
+Implementa la lógica de negocio.
+
+- Crear `src/implementation/user_service.rs`.
+- El servicio debe tener un campo `repo: Arc<dyn PortUserRepo>`.
+- Implementa métodos como `create_user`, `find_user`. **Documenta** estos métodos con `///`.
+
+### Paso 3: Infrastructure
+
+Implementa los detalles técnicos.
+
+- **Persistencia**: Crear `src/infrastructure/persistence/user_repo.rs`. Implementa el trait `PortUserRepo` usando MongoDB.
+- **HTTP**:
+  - Definir DTOs en `src/infrastructure/http/dto/user_dto.rs` (Request/Response).
+  - Crear Handlers en `src/infrastructure/http/handlers/user_handler.rs`.
+
+### Paso 4: Wiring (Conexión)
+
+Conecta todo en el arranque.
+
+1.  En `src/ctx.rs`: Agrega `user_srv: UserService` al struct `AppContext`.
+2.  En `src/main.rs`: Instancia el repositorio, luego el servicio, e inyectalo en el contexto.
+3.  En `src/infrastructure/http/routes.rs`: Registra las nuevas rutas.
+
+---
+
+## ✅ Health Check
+
+El servicio incluye un endpoint de salud robusto que verifica la conexión a la base de datos:
+
+```bash
+curl http://localhost:8080/healthz
 ```
-TRACE < DEBUG < INFO < WARN < ERROR
-```
 
-The `DEBUG_LEVEL` environment variable controls which log levels are displayed. By default, it is set to `INFO`, meaning that `INFO`, `WARN`, and `ERROR` logs will be visible. To see more detailed logs for debugging, set `DEBUG_LEVEL` to `DEBUG` or `TRACE`.
-
-#### Example Usage
-
-Simple text log:
-
-```rust
-tracing::info!("This is an info log");
-tracing::warn!("This is a warning log");
-```
-
-Log with structured data, which is highly recommended for machine-readable logs:
-
-```rust
-tracing::info!(user_id = 42, "User logged in");
-tracing::warn!(error = "Database connection failed", "A component failed to start");
-```
-
-### Optional Providers
-
-The template includes several optional providers in `src/infrastructure/providers` for common Google Cloud services:
-
-- `prv_pubsub.rs`: For publishing messages to Google Cloud Pub/Sub.
-- `prv_storage.rs`: For interacting with Google Cloud Storage.
-- `prv_tasks.rs`: For creating tasks in Google Cloud Tasks.
-
-These are not wired into the application by default. To use them, you must expose them in `src/infrastructure/providers/mod.rs` and initialize them in `main.rs`, similar to how `MongoProvider` is handled.
-
-## API Endpoints
-
-This template provides a simple example feature with the following endpoints:
-
-- `GET /api/v1/example`: Retrieves a list of all examples from the database.
-- `GET /api/v1/example/error`: Retrieves an example that always returns an error, demonstrating error handling.
-- `POST /api/v1/example/random`: Creates a new example with a random name and adds it to the database.
+- **200 OK**: El servicio y la base de datos funcionan correctamente.
+- **503 Service Unavailable**: El servicio funciona, pero la conexión a la BD falló.
