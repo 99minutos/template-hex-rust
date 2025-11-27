@@ -16,6 +16,7 @@ tower-http = { version = "0.6", features = [
     "cors",
     "trace",
     "compression-gzip",
+    "decompression-gzip",
 ] }
 anyhow = "1"
 thiserror = "1"
