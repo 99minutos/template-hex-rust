@@ -7,6 +7,7 @@ pub struct EnvConfig {
     pub project_id: Option<String>,
     pub mongo_uri: String,
     pub mongo_db: String,
+    pub debug_level: String,
 }
 
 static CONFIG: OnceLock<EnvConfig> = OnceLock::new();
@@ -26,6 +27,7 @@ impl EnvConfig {
             service_name: std::env::var("SERVICE_NAME").expect("SERVICE_NAME is required"),
             mongo_uri: std::env::var("MONGO_URL").expect("MONGO_URL is required"),
             mongo_db: std::env::var("MONGO_DB").expect("MONGO_DB is required"),
+            debug_level: std::env::var("DEBUG_LEVEL").unwrap_or("INFO".to_string()),
         }
     }
 }

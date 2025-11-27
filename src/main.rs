@@ -17,11 +17,9 @@ pub use ctx::AppContext;
 #[tokio::main]
 async fn main() -> std::io::Result<()> {
     let envs = crate::envs::get();
-    let tracer = tools::init_tracer(envs.service_name.clone()).await;
-    if tracer.is_ok() && envs.project_id.is_some() {
-        tools::init_logger(tracer.unwrap(), envs.project_id.clone().unwrap());
-    } else {
-        tools::init_logger_without_trace()
+
+    if let Err(e) = tools::init_tracing().await {
+        eprintln!("Failed to initialize tracing: {}", e);
     }
 
     let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone())
