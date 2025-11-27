@@ -1,7 +1,7 @@
-use implementation::{Example2Service, ExampleService};
+use implementation::{Example2Service, ExampleService, HealthService};
 use infrastructure::{
     http::HttpProvider,
-    persistence::{Example2Repository, ExampleRepository},
+    persistence::{Example2Repository, ExampleRepository, HealthRepository},
     providers::MongoProvider,
 };
 
@@ -33,9 +33,12 @@ async fn main() -> std::io::Result<()> {
         Example2Repository::new(&database)
     );
 
+    let health_rep = HealthRepository::new(&database);
+
     let context = AppContext {
         example_srv: ExampleService::new(example_rep),
         example2_srv: Example2Service::new(example2_rep),
+        health_srv: HealthService::new(health_rep),
     };
 
     HttpProvider::start_server(envs.port, context).await

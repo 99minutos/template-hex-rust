@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use axum::{
+    extract::State,
+    http::StatusCode,
     routing::{get, post},
     Router,
 };
@@ -13,6 +15,14 @@ use crate::{
     infrastructure::http::handlers::{handler_example, handler_example2},
     AppContext,
 };
+
+async fn health_check(State(context): State<Arc<AppContext>>) -> impl axum::response::IntoResponse {
+    if context.health_srv.check().await {
+        (StatusCode::OK, "ok")
+    } else {
+        (StatusCode::SERVICE_UNAVAILABLE, "error")
+    }
+}
 
 pub fn app(context: Arc<AppContext>) -> Router {
     let example_routes = Router::new()
@@ -40,7 +50,7 @@ pub fn app(context: Arc<AppContext>) -> Router {
         );
 
     Router::new()
-        .route("/healthz", get(|| async { "ok" }))
+        .route("/healthz", get(health_check))
         .nest("/api/v1", api_routes)
         .layer(TraceLayer::new_for_http())
         .layer(CompressionLayer::new())

@@ -8,15 +8,18 @@ pub struct ExampleService {
 }
 
 impl ExampleService {
+    /// Crea una nueva instancia del servicio.
     pub fn new(example_repo: Arc<dyn ports::PortExampleRepo>) -> Self {
         ExampleService { example_repo }
     }
 
+    /// Obtiene todos los ejemplos disponibles.
     #[tracing::instrument(skip_all)]
     pub async fn get_examples(&self) -> DomainWrapper<Vec<entities::Example>> {
         self.example_repo.all().await
     }
 
+    /// Retorna un error simulado.
     #[tracing::instrument(skip_all)]
     pub async fn get_examples_with_error(&self) -> DomainWrapper<Vec<entities::Example>> {
         Err(domain::DomainError::new(
@@ -25,6 +28,7 @@ impl ExampleService {
         ))
     }
 
+    /// Crea y guarda un ejemplo aleatorio.
     #[tracing::instrument(skip_all)]
     pub async fn add_random_example(&self) -> DomainWrapper<entities::Example> {
         let mut example = entities::Example::default();
@@ -32,6 +36,7 @@ impl ExampleService {
         self.example_repo.insert(example).await
     }
 
+    /// Crea y guarda un nuevo ejemplo.
     #[tracing::instrument(skip_all)]
     pub async fn create_example(&self, name: String) -> DomainWrapper<entities::Example> {
         let mut example = entities::Example::default();
@@ -39,6 +44,7 @@ impl ExampleService {
         self.example_repo.insert(example).await
     }
 
+    /// Obtiene una lista paginada de ejemplos.
     #[tracing::instrument(skip_all)]
     pub async fn get_examples_paginated(
         &self,

@@ -1,3 +1,4 @@
+use std::process;
 use std::sync::OnceLock;
 
 #[derive(Debug)]
@@ -11,23 +12,37 @@ pub struct EnvConfig {
 }
 
 static CONFIG: OnceLock<EnvConfig> = OnceLock::new();
+
 pub fn get() -> &'static EnvConfig {
-    CONFIG.get_or_init(|| EnvConfig::new())
+    CONFIG.get_or_init(EnvConfig::load)
 }
 
 impl EnvConfig {
-    fn new() -> Self {
+    fn load() -> Self {
         dotenv::dotenv().ok();
+
         Self {
-            port: std::env::var("PORT")
-                .unwrap_or("8080".to_string())
-                .parse()
-                .unwrap(),
+            port: parse_port(),
+            service_name: require_env("SERVICE_NAME"),
             project_id: std::env::var("PROJECT_ID").ok(),
-            service_name: std::env::var("SERVICE_NAME").expect("SERVICE_NAME is required"),
-            mongo_uri: std::env::var("MONGO_URL").expect("MONGO_URL is required"),
-            mongo_db: std::env::var("MONGO_DB").expect("MONGO_DB is required"),
-            debug_level: std::env::var("DEBUG_LEVEL").unwrap_or("INFO".to_string()),
+            mongo_uri: require_env("MONGO_URL"),
+            mongo_db: require_env("MONGO_DB"),
+            debug_level: std::env::var("DEBUG_LEVEL").unwrap_or_else(|_| "INFO".into()),
         }
     }
+}
+
+fn require_env(name: &str) -> String {
+    std::env::var(name).unwrap_or_else(|_| {
+        eprintln!("Error: Missing required environment variable '{}'", name);
+        process::exit(1);
+    })
+}
+
+fn parse_port() -> u16 {
+    let port_str = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
+    port_str.parse().unwrap_or_else(|_| {
+        eprintln!("Error: PORT must be a valid number, got '{}'", port_str);
+        process::exit(1);
+    })
 }
