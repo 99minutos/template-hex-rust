@@ -22,7 +22,8 @@ impl ExampleRepository {
     }
 
     async fn create_index(&self) {
-        self.db
+        let _ = self
+            .db
             .create_indexes(vec![
                 IndexModel::builder()
                     .keys(doc! {
@@ -45,8 +46,7 @@ impl ExampleRepository {
                     )
                     .build(),
             ])
-            .await
-            .unwrap();
+            .await;
     }
 }
 
