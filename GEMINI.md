@@ -56,6 +56,8 @@ El proyecto está organizado en capas concéntricas. La dependencia solo puede a
     - Los repositorios devuelven `DomainWrapper<T>`.
 2.  **HTTP**:
     - **NUNCA** pasar entidades de dominio directamente como JSON en la respuesta. Usar DTOs (`From<Entity> for Dto`).
+    - **Conversión de Tipos (Output DTOs)**: Es **crítico** convertir `ObjectId` a `String` y `bson::DateTime` a `chrono::DateTime<Utc>`.
+      - _Razón_: Evitar el formato extendido de MongoDB (ej. `_id: { "$oid": "..." }`) en la respuesta JSON. Queremos una API limpia (`id: "507f1f77bcf86cd799439011"`).
     - Los handlers deben ser delgados: `Request -> DTO -> Service -> Response`.
     - Usar `validator` en los DTOs de entrada.
 
@@ -109,6 +111,22 @@ match self.db.find_one(...).await {
     Ok(Some(doc)) => Ok(doc),
     Ok(None) => Err(DomainError::new(ErrorKind::NotFound, "Elemento no encontrado")),
     Err(e) => Err(DomainError::new(ErrorKind::Database, format!("Error DB: {}", e))),
+}
+```
+
+**DTO de Salida (Conversión Correcta):**
+
+```rust
+impl From<User> for UserDto {
+    fn from(entity: User) -> Self {
+        Self {
+            // ObjectId -> String (Evita {"$oid": "..."})
+            id: entity.id.to_string(),
+            // Bson DateTime -> Chrono (Evita {"$date": ...})
+            created_at: entity.created_at.to_chrono(),
+            name: entity.name,
+        }
+    }
 }
 ```
 

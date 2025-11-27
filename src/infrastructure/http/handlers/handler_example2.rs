@@ -4,7 +4,7 @@ use axum::{extract::State, response::IntoResponse};
 
 use crate::{
     infrastructure::http::{
-        dto::example2_dto::Example2Dto, error::AppError, response::GenericApiResponse,
+        dto::example2::Example2Dto, error::AppError, response::GenericApiResponse,
     },
     AppContext,
 };

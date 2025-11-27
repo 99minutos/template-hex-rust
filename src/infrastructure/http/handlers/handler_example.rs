@@ -9,7 +9,7 @@ use crate::{
     domain::Pagination,
     infrastructure::http::{
         dto::{
-            example_dto::{CreateExampleRequest, ExampleDto, ListExamplesQuery},
+            example::{CreateExampleRequest, ExampleDto, ListExamplesQuery},
             ValidatedJson,
         },
         error::AppError,

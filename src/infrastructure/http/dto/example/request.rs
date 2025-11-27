@@ -1,33 +1,13 @@
-use chrono::{DateTime, Utc};
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use validator::Validate;
 
-use super::{InputRequest, OutputResponse};
-use crate::domain::{entities::Example, Pagination};
+use crate::domain::Pagination;
+use crate::infrastructure::http::dto::InputRequest;
 
-#[derive(Debug, Serialize)]
-pub struct ExampleDto {
-    pub id: String,
-    pub name: String,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-}
-
-impl OutputResponse for ExampleDto {}
-
-impl From<Example> for ExampleDto {
-    fn from(example: Example) -> Self {
-        Self {
-            id: example.id.to_string(),
-            name: example.name,
-            created_at: example.created_at.to_chrono(),
-            updated_at: example.updated_at.to_chrono(),
-        }
-    }
-}
-
+/// DTO de entrada para crear un nuevo ejemplo.
 #[derive(Debug, Deserialize, Validate)]
 pub struct CreateExampleRequest {
+    /// Nombre del ejemplo. Debe tener entre 3 y 100 caracteres.
     #[validate(length(
         min = 3,
         max = 100,
@@ -38,12 +18,15 @@ pub struct CreateExampleRequest {
 
 impl InputRequest for CreateExampleRequest {}
 
+/// Query parameters para listar ejemplos paginados.
 #[derive(Debug, Deserialize, Validate)]
 pub struct ListExamplesQuery {
+    /// Número de página (inicia en 0).
     #[validate(range(min = 0))]
     #[serde(default)]
     pub page: u64,
 
+    /// Cantidad de elementos por página (default 20, max 100).
     #[validate(range(min = 1, max = 100))]
     #[serde(default = "default_limit")]
     pub limit: u64,
