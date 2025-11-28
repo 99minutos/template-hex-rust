@@ -34,7 +34,7 @@ impl EnvConfig {
 
 fn require_env(name: &str) -> String {
     std::env::var(name).unwrap_or_else(|_| {
-        eprintln!("Error: Missing required environment variable '{}'", name);
+        tracing::error!("Missing required environment variable '{}'", name);
         process::exit(1);
     })
 }
@@ -42,7 +42,7 @@ fn require_env(name: &str) -> String {
 fn parse_port() -> u16 {
     let port_str = std::env::var("PORT").unwrap_or_else(|_| "8080".into());
     port_str.parse().unwrap_or_else(|_| {
-        eprintln!("Error: PORT must be a valid number, got '{}'", port_str);
+        tracing::error!("PORT must be a valid number, got '{}'", port_str);
         process::exit(1);
     })
 }

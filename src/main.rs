@@ -19,7 +19,7 @@ async fn main() -> std::io::Result<()> {
     let envs = crate::envs::get();
 
     if let Err(e) = tools::init_tracing().await {
-        eprintln!("Failed to initialize tracing: {}", e);
+        tracing::error!("Failed to initialize tracing: {}", e);
     }
 
     let mongodb = MongoProvider::new(envs.mongo_uri.clone(), envs.mongo_db.clone())
