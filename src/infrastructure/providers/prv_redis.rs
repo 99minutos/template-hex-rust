@@ -6,6 +6,17 @@ pub struct RedisProvider {
     prefix: String,
 }
 
+impl std::fmt::Debug for RedisProvider {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("RedisProvider")
+            .field(
+                "cache",
+                &format_args!("<redis::Connection instance (hidden)>"),
+            )
+            .finish()
+    }
+}
+
 impl RedisProvider {
     pub async fn new(url: &str, prefix: &str) -> Result<Self, redis::RedisError> {
         let client = redis::Client::open(url)?;
