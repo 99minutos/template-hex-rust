@@ -4,3 +4,5 @@
 *.bin
 *.md
 !README.md
+!GEMINI.md
+!CLAUDEx3.md
