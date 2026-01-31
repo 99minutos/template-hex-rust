@@ -1,0 +1,45 @@
+steps:
+  # 1. Build Service Image
+  - id: "build-service"
+    name: "gcr.io/cloud-builders/docker"
+    entrypoint: "bash"
+    args:
+      - -c
+      - |
+        docker build -t us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA \
+          -t us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:latest \
+          -f build/Dockerfile .
+
+  # 2. Register Service Image (Push)
+  - id: "register-service"
+    name: "gcr.io/cloud-builders/docker"
+    waitFor: ["build-service"]
+    args:
+      [
+        "push",
+        "us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA",
+      ]
+
+  # 3. Deploy to Cloud Run
+  - id: "deploy-service"
+    name: "gcr.io/cloud-builders/gcloud"
+    waitFor: ["register-service"]
+    args:
+      - "run"
+      - "deploy"
+      - "$_SERVICE_NAME"
+      - "--image=us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--region=$_REGION"
+      - "--platform=managed"
+      - "--allow-unauthenticated"
+      - "--cpu-boost"
+      - "--set-env-vars=APP_ENV=$_APP_ENV,SERVICE_NAME=$_SERVICE_NAME,PROJECT_ID=$PROJECT_ID"
+      # Configure sus secretos y envs adicionales manualmente o vía sustituciones
+
+substitutions:
+  _APP_ENV: "PRD"
+  _REGION: "us-central1"
+
+options:
+  machineType: E2_HIGHCPU_32
+  logging: CLOUD_LOGGING_ONLY
