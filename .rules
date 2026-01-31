@@ -1,168 +1,850 @@
-# Rust Backend Development Agent - Advanced Configuration
-# Version: 3.0 (Layered Architecture Edition)
-# Target: High-Performance, Production-Ready Web Services
+# Rust High-Performance Backend Agent
+# Version: 4.0 | Layered Architecture | Micro → Macro Scale
+# Target: Production-Grade, Scalable Services (μServices → Monoliths)
 
-You are an expert Rust Software Engineer specializing in high-performance web architectures, secure systems design, and production-grade code. Your mission is to assist in developing features for this project while ensuring strict adherence to established patterns, best practices, and production readiness.
+Expert Rust engineer for building high-performance web services. Prioritize: type safety, zero-cost abstractions, async efficiency, memory optimization, and architectural scalability. Strict adherence to patterns, no premature abstractions.
 
-## 1. Project Context & Tech Stack
+## 1. Tech Stack & Performance Profile
 
-**Language**: Rust (Edition 2024)
-**Web Framework**: Axum 0.8
-**Database**: MongoDB 3.x (Official Driver with `bson-3` feature)
-**Cache Layer**: Redis 1.x
-**Async Runtime**: Tokio 1.x (full features)
-**Architecture Pattern**: Layered Architecture (Domain, Application, Infrastructure, Presentation)
-**Observability**: OpenTelemetry + Tracing + Stackdriver
-**API Documentation**: utoipa (OpenAPI 3.0)
+**Core**: Rust 2024 | Axum 0.8 (Tower middleware) | Tokio 1.x (multi-threaded runtime)
+**Data**: MongoDB 3.x (`bson-3`) | Redis 1.x (pipelining support) | Connection pooling
+**Arch**: Layered (Domain → Application → Infrastructure → Presentation)
+**Observability**: OpenTelemetry + tracing (structured logging, distributed tracing)
+**Docs**: utoipa (OpenAPI 3.0 auto-generation)
+**Perf Goals**: Sub-ms p50 latency | >10k RPS single-instance | <50MB base memory
 
-## 2. Architecture & Directory Structure
+## 2. Architecture & Scaling Strategy
 
-### 2.1 Project Layout (Horizontal Slicing)
+### 2.1 Layered Structure (Dependency Rule: Inner layers never depend on outer)
 ```
 src/
-├── domain/               # Enterprise logic & Entities (Pure Rust)
-│   ├── users.rs          # Entity definitions (Option<ObjectId>)
-│   ├── products.rs
-│   └── error.rs          # Domain-wide error types
-├── application/          # Use Cases & Services
-│   ├── users.rs          # Business rules, orchestration
-│   └── products.rs
-├── infrastructure/       # External concerns implementation
-│   ├── persistence/      # Repository implementations
-│   │   ├── users.rs
-│   │   └── mongo.rs      # Database connection
-│   └── providers/        # 3rd party adapters (Redis, Telemetry)
-├── presentation/         # Entry points (HTTP, Grpc, CLI)
+├── domain/               # Pure business (zero dependencies, high cohesion)
+│   ├── {entity}.rs       # Structs: pub fields, Option<ObjectId>, Serialize/Deserialize
+│   └── error.rs          # thiserror enums (DomainError types)
+├── application/          # Orchestration layer (coordinates repositories)
+│   └── {entity}.rs       # Services: Arc<Repo> deps, business rules, transactions
+├── infrastructure/       # External I/O (DB, cache, APIs, messaging)
+│   ├── persistence/      # Repos: CRUD + custom queries, connection pools
+│   │   ├── {entity}.rs   # Returns Result<ObjectId> on create
+│   │   └── mongo.rs      # mongodb::Client (shared pool)
+│   └── providers/        # Redis, S3, HTTP clients, message queues
+├── presentation/         # API layer (protocol-agnostic handlers)
 │   ├── http/
-│   │   ├── users/        # Routes & DTOs
-│   │   │   ├── routes.rs # Handlers
-│   │   │   └── dtos.rs   # Request/Response structs
-│   │   ├── validation.rs # Axum extractors
-│   │   └── response.rs   # Standard response wrappers
-│   ├── server.rs         # Axum Server setup
-│   ├── state.rs          # AppState definition
-│   └── openapi.rs        # Swagger/OpenAPI registry
-├── config.rs             # Configuration management
-└── main.rs               # Wiring & Entry point
+│   │   ├── {entity}/     # routes.rs (handlers), dtos.rs (ToSchema, validator)
+│   │   ├── validation.rs # ValidatedJson, ValidatedQuery extractors
+│   │   ├── response.rs   # ApiResponse<T>, ApiError enums
+│   │   └── middleware/   # Auth, Rate limiting, Compression
+│   ├── server.rs         # Axum app: graceful shutdown, signal handling
+│   ├── state.rs          # AppState: Arc services, FromRef sub-states
+│   └── openapi.rs        # utoipa::OpenApi macro registry
+├── config.rs             # envy/dotenvy env parsing, validation
+└── main.rs               # DI wiring: Repo → Service → State → Router
 ```
 
-## 3. Design Patterns & Flow (Strict Guidelines)
+### 2.2 Scaling Patterns (μService → Monolith Evolution)
 
-### 3.1 Data Flow
-**MANDATORY FLOW**: Request → Presentation (Route) → Application (Service) → Infrastructure (Repository) → Database
+**Phase 1: Single Service (0-10K RPS)**
+- 1 binary, 1 DB, vertical scaling
+- Shared `AppState`, all services in-process
+- Example: `users`, `products`, `orders` modules
 
-### 3.2 Dependency Injection (DI)
-- **Granular Injection**: Use `axum::extract::FromRef` (Sub-state extraction).
-- **No Ports/Adapters**: Use concrete types (`Arc<UsersService>`, `Arc<UsersRepository>`) unless testing requires mocks.
-- **Wiring**: Dependencies are built in `main.rs` and injected into `AppState`.
+**Phase 2: Modular Monolith (10K-100K RPS)**
+- Feature flags: compile-time `#[cfg(feature = "module_name")]`
+- Workspace structure: `members = ["core", "api", "workers"]`
+- Shared domain crate: `domain = { path = "../domain" }`
+- Separate deployables from same codebase
 
-**Example Handler**:
+**Phase 3: Distributed Services (>100K RPS)**
+- Extract high-traffic modules to separate binaries
+- Message bus: RabbitMQ/NATS for async communication
+- Service mesh: gRPC + Tonic for sync calls
+- Shared: `domain-contracts` crate (entities, errors)
+
+**Choosing Scale**: Start Phase 1. Graduate to Phase 2 when: >5 teams, distinct SLAs, or independent deploy cycles needed. Phase 3 only when network cost < coordination cost.
+
+## 3. Core Patterns (Strict Enforcement)
+
+### 3.1 Request Flow (Never Bypass Layers)
+```
+HTTP → Handler → Service → Repo → DB
+ ↓        ↓         ↓       ↓      ↓
+DTO  → Validate → Logic → Query → Entity
+```
+**Rules**:
+- Controllers NEVER call Repos directly
+- Services MAY call multiple Repos (compose operations)
+- Repos NEVER contain business logic (only data mapping)
+
+### 3.2 Dependency Injection (Axum State + FromRef)
 ```rust
+// state.rs - Granular extraction
+#[derive(Clone)]
+pub struct AppState {
+    pub users: Arc<UsersService>,
+    pub products: Arc<ProductsService>,
+    pub db: mongodb::Client, // Rarely injected directly
+}
+
+impl FromRef<AppState> for Arc<UsersService> {
+    fn from_ref(state: &AppState) -> Self { state.users.clone() }
+}
+
+// routes.rs - Zero-cost extraction
 pub async fn create_user(
-    State(service): State<Arc<UsersService>>, // Inject ONLY what you need
-    ValidatedJson(req): ValidatedJson<CreateUserDto>,
-) -> Result<impl IntoResponse, Error>
+    State(svc): State<Arc<UsersService>>, // Only Arc::clone, no lock
+    ValidatedJson(dto): ValidatedJson<CreateUserDto>,
+) -> Result<Json<UserResponse>, ApiError>
 ```
+**Why Arc?**: Services are stateless coordinators. `Arc` enables cheap cloning across tasks without locks. Never use `Mutex<Service>` (anti-pattern).
 
-### 3.3 Domain Layer Guidelines
-- **Entities**: Structs with `pub` fields.
-- **IDs**: Use `Option<ObjectId>` for IDs.
-- **Serialization**: Use `#[serde(rename = "_id", skip_serializing_if = "Option::is_none")]` for ID fields.
-- **Independence**: Should NOT depend on `application` or `infrastructure`.
-
-**Example Entity**:
+### 3.3 Domain Layer (Pure, Portable, Testable)
 ```rust
-#[derive(Debug, Serialize, Deserialize, Clone)]
+// ALWAYS: pub fields, Option<ObjectId>, serde derives
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(test, derive(PartialEq))] // Testing ergonomics
 pub struct User {
     #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
-    pub id: Option<bson::oid::ObjectId>,
-    pub name: String,
+    pub id: Option<ObjectId>,
+    pub email: String, // Validated in Presentation, not here
+    #[serde(with = "bson::serde_helpers::chrono_datetime_as_bson_datetime")]
+    pub created_at: chrono::DateTime<chrono::Utc>,
+}
+
+// RULE: No async, no I/O, no framework deps
+// OK: Business rules, validations, calculations
+impl User {
+    pub fn is_premium(&self) -> bool { /* domain logic */ }
+}
+```
+**Performance**: Zero-cost. Compiler inlines small methods. `Clone` is explicit (no hidden allocations).
+
+### 3.4 Application Layer (Services: Orchestrators, Not Data Holders)
+```rust
+pub struct UsersService {
+    repo: Arc<UsersRepository>,
+    cache: Arc<RedisProvider>, // Cross-repo coordination
+}
+
+impl UsersService {
+    // Pattern: ID flow (MongoDB doesn't mutate input)
+    pub async fn create(&self, dto: CreateUserDto) -> Result<User, DomainError> {
+        let mut user = User { id: None, email: dto.email, created_at: Utc::now() };
+        let id = self.repo.create(&user).await?; // Returns ObjectId
+        user.id = Some(id);
+
+        // Side effects AFTER persistence (idempotent when possible)
+        self.cache.invalidate(&format!("user:{id}")).await.ok();
+        Ok(user)
+    }
+
+    // Pattern: Transaction composition (MongoDB multi-doc txn)
+    pub async fn transfer_credits(&self, from: ObjectId, to: ObjectId, amt: u64)
+        -> Result<(), DomainError>
+    {
+        let session = self.repo.start_session().await?;
+        session.with_transaction(|s| async {
+            self.repo.decrement_credits(from, amt, s).await?;
+            self.repo.increment_credits(to, amt, s).await?;
+            Ok(())
+        }).await
+    }
+}
+```
+**Perf Notes**:
+- Services are stateless → Safe to `Arc::clone` across requests
+- Avoid `Mutex<HashMap>` caches (use Redis/external state)
+- Batch operations: Use `join_all` for parallel I/O (MongoDB cursors support concurrency)
+
+### 3.5 Infrastructure Layer (Repos: Data Mapping Only)
+```rust
+pub struct UsersRepository {
+    collection: Collection<User>,
+}
+
+impl UsersRepository {
+    // MANDATORY: Return ObjectId, not User (avoid false assumptions about mutations)
+    pub async fn create(&self, user: &User) -> Result<ObjectId, mongodb::error::Error> {
+        let res = self.collection.insert_one(user).await?;
+        Ok(res.inserted_id.as_object_id().unwrap_or_default())
+    }
+
+    // Optimization: Projection (fetch only needed fields)
+    pub async fn find_email_by_id(&self, id: ObjectId) -> Result<Option<String>, Error> {
+        self.collection
+            .find_one(doc! { "_id": id })
+            .projection(doc! { "email": 1 })
+            .await?
+            .map(|u| u.email)
+            .ok_or(Error::NotFound)
+    }
+
+    // Optimization: Indexing hint
+    pub async fn find_by_email_fast(&self, email: &str) -> Result<Option<User>, Error> {
+        self.collection
+            .find_one(doc! { "email": email })
+            .hint(doc! { "email": 1 }) // Use index
+            .await
+    }
+}
+```
+**Perf Checklist**:
+- ✅ Indexes on all query fields (`db.users.createIndex({email:1})`)
+- ✅ Connection pooling (MongoDB client auto-handles)
+- ✅ Projection for large docs (reduce network transfer)
+- ✅ Batch inserts: `insert_many` > loop of `insert_one`
+
+### 3.6 Presentation Layer (HTTP: Fast Path to Business Logic)
+```rust
+// dtos.rs - Zero-copy where possible
+#[derive(Deserialize, ToSchema, Validate)]
+pub struct CreateUserDto {
+    #[validate(email)]
+    pub email: String, // Heap allocation unavoidable for dynamic strings
+    #[validate(length(min = 8))]
+    pub password: String,
+}
+
+// routes.rs - Minimize allocations in hot path
+#[utoipa::path(post, path = "/users", request_body = CreateUserDto)]
+pub async fn create_user(
+    State(svc): State<Arc<UsersService>>,
+    ValidatedJson(dto): ValidatedJson<CreateUserDto>, // Validates BEFORE handler
+) -> Result<Json<UserResponse>, ApiError> {
+    let user = svc.create(dto).await?;
+    Ok(Json(user.into())) // From<User> for UserResponse
+}
+
+// Optimization: Stream large responses (avoid buffering)
+pub async fn list_users_stream(
+    State(svc): State<Arc<UsersService>>,
+) -> impl IntoResponse {
+    let stream = svc.list_all_cursor().await; // Returns futures::Stream
+    Body::from_stream(stream.map(|u| serde_json::to_vec(&u)))
+}
+```
+**Perf Wins**:
+- `ValidatedJson` = reject invalid early (saves Service invocation)
+- Path params = `axum::extract::Path<String>` (no regex, O(1) routing)
+- Compression middleware: `tower_http::compression` (gzip response bodies >1KB)
+
+## 4. High-Performance Development Protocol
+
+### 4.1 Feature Implementation Flow (Bottom-Up Approach)
+```
+1. Domain   → Define entity (struct, no logic yet)
+2. Infra    → Repo methods (CRUD + indexes)
+3. App      → Service (business rules, multi-repo orchestration)
+4. Present  → DTOs (validation) + Routes (handlers)
+5. Wire     → main.rs (DI), state.rs (AppState), http/mod.rs (router)
+6. Document → openapi.rs (register paths/schemas)
+7. Test     → Integration test (happy path + edge cases)
+```
+**Example: Adding `orders` module**
+```rust
+// Check dependencies FIRST: Does Order reference User/Product?
+// If yes: Service needs Arc<UsersRepo>, Arc<ProductsRepo>
+
+// 1. domain/orders.rs
+pub struct Order { pub id: Option<ObjectId>, pub user_id: ObjectId, pub total: f64 }
+
+// 2. infrastructure/persistence/orders.rs
+pub struct OrdersRepository { collection: Collection<Order> }
+impl OrdersRepository {
+    pub async fn create(&self, o: &Order) -> Result<ObjectId, Error> { /* ... */ }
+    pub async fn find_by_user(&self, uid: ObjectId) -> Result<Vec<Order>, Error> { /* ... */ }
+}
+
+// 3. application/orders.rs
+pub struct OrdersService {
+    orders_repo: Arc<OrdersRepository>,
+    users_repo: Arc<UsersRepository>, // Cross-entity validation
+}
+impl OrdersService {
+    pub async fn create(&self, dto: CreateOrderDto) -> Result<Order, Error> {
+        // Validate user exists BEFORE creating order
+        self.users_repo.find_by_id(dto.user_id).await?;
+        let mut order = Order { id: None, user_id: dto.user_id, total: dto.total };
+        let id = self.orders_repo.create(&order).await?;
+        order.id = Some(id);
+        Ok(order)
+    }
+}
+
+// 4. presentation/http/orders/{routes.rs, dtos.rs}
+// 5. main.rs: let orders_repo = Arc::new(OrdersRepository::new(...));
+//             let orders_svc = Arc::new(OrdersService::new(orders_repo, users_repo));
+// 6. state.rs: pub orders: Arc<OrdersService>
+// 7. http/mod.rs: .nest("/orders", orders::routes())
+```
+
+### 4.2 Performance-Critical Coding Standards
+
+**Memory Management**
+```rust
+// ✅ Good: Stack allocation for small fixed data
+let user_ids: [ObjectId; 10] = [ObjectId::new(); 10];
+
+// ❌ Bad: Unnecessary Box (heap alloc)
+let user_id = Box::new(ObjectId::new());
+
+// ✅ Good: Reserve capacity to avoid reallocs
+let mut users = Vec::with_capacity(expected_size);
+
+// ❌ Bad: Cloning large structs in loops
+for user in users.iter() {
+    process(user.clone()); // Heap alloc on each iteration
+}
+// ✅ Good: Borrow when possible
+for user in users.iter() {
+    process(user); // Zero-cost
 }
 ```
 
-### 3.4 Application Layer (Services)
-- **Responsibility**: Business logic, orchestration.
-- **ID Handling**: 
-  - Initialize entities with `id: None`.
-  - Call repository `create`.
-  - Receive `ObjectId` from repository.
-  - Update entity with `id: Some(id)`.
-- **Return**: Return full Domain Entities.
-
-**Example Service**:
+**Async Patterns**
 ```rust
-pub async fn create_user(&self, dto: CreateUserDto) -> Result<User, Error> {
-    let mut user = User { id: None, name: dto.name };
-    let id = self.repo.create(&user).await?;
-    user.id = Some(id);
+// ✅ Good: Parallel I/O (MongoDB supports concurrent queries)
+let (users, products) = tokio::join!(
+    users_repo.find_all(),
+    products_repo.find_all()
+);
+
+// ❌ Bad: Sequential (2x latency)
+let users = users_repo.find_all().await;
+let products = products_repo.find_all().await;
+
+// ✅ Good: Batch processing with bounded parallelism
+use futures::stream::{self, StreamExt};
+stream::iter(user_ids)
+    .map(|id| users_repo.find_by_id(id))
+    .buffer_unordered(10) // Max 10 concurrent queries
+    .collect::<Vec<_>>()
+    .await;
+```
+
+**Error Handling (Zero-Cost Abstractions)**
+```rust
+// ✅ Good: Use ? for early returns (no runtime overhead)
+pub async fn get_user(&self, id: ObjectId) -> Result<User, DomainError> {
+    let user = self.repo.find_by_id(id).await?; // Maps mongo::Error → DomainError
+    Ok(user)
+}
+
+// ❌ Bad: unwrap() in production (panics = thread death)
+let user = self.repo.find_by_id(id).await.unwrap();
+
+// ✅ Good: Context for debugging
+use anyhow::Context;
+self.repo.create(&user).await.context("Failed to create user")?;
+```
+
+**String Handling**
+```rust
+// ✅ Good: &str for read-only (no allocation)
+pub fn validate_email(email: &str) -> bool { /* ... */ }
+
+// ❌ Bad: Owned String when not needed
+pub fn validate_email(email: String) -> bool { /* ... */ }
+
+// ✅ Good: Cow for conditional allocation
+use std::borrow::Cow;
+pub fn normalize<'a>(s: &'a str) -> Cow<'a, str> {
+    if s.is_empty() { Cow::Borrowed("default") }
+    else { Cow::Borrowed(s) }
+}
+```
+
+### 4.3 Agent Efficiency Protocol
+**Pre-Implementation Checklist**:
+- [ ] Read existing related files BEFORE generating code
+- [ ] Check `Cargo.toml` for available dependencies (no guessing)
+- [ ] Use `crate::` absolute imports (NEVER `super::super::`)
+- [ ] Verify layer dependencies (Domain NEVER imports Application)
+
+**Post-Implementation Checklist**:
+- [ ] Run `cargo check` (compile errors)
+- [ ] Run `cargo clippy` (Rust best practices)
+- [ ] Run `cargo fmt` (consistent style)
+- [ ] Remove unused imports: `cargo fix --allow-dirty`
+
+**Zero Tolerance**:
+- ❌ Hallucinating crate names (e.g., `use fake_crate::Something;`)
+- ❌ Breaking layer rules (e.g., Domain importing Axum)
+- ❌ Ignoring compilation errors in responses
+- ❌ Using blocking I/O in async context (`std::fs` → `tokio::fs`)
+
+## 5. Performance Optimization Playbook
+
+### 5.1 Database Layer
+```rust
+// Index Strategy (Run in MongoDB shell)
+db.users.createIndex({ "email": 1 }, { unique: true });
+db.orders.createIndex({ "user_id": 1, "created_at": -1 }); // Compound index
+db.products.createIndex({ "name": "text" }); // Full-text search
+
+// Query Optimization
+// ❌ Bad: Fetch all, filter in Rust
+let users = repo.find_all().await?;
+let active = users.into_iter().filter(|u| u.active).collect();
+
+// ✅ Good: Filter in DB (indexes!)
+let active = repo.find_by_filter(doc! { "active": true }).await?;
+
+// Aggregation Pipeline (Complex queries)
+collection.aggregate([
+    doc! { "$match": { "status": "active" } },
+    doc! { "$group": { "_id": "$category", "count": { "$sum": 1 } } },
+    doc! { "$sort": { "count": -1 } },
+]).await?;
+```
+
+### 5.2 Caching Strategy
+```rust
+// Pattern: Cache-Aside (lazy loading)
+pub async fn get_user(&self, id: ObjectId) -> Result<User, Error> {
+    let cache_key = format!("user:{id}");
+
+    // L1: Check cache
+    if let Some(cached) = self.cache.get::<User>(&cache_key).await? {
+        return Ok(cached);
+    }
+
+    // L2: Query DB
+    let user = self.repo.find_by_id(id).await?;
+
+    // L3: Update cache (fire-and-forget)
+    tokio::spawn({
+        let cache = self.cache.clone();
+        let key = cache_key.clone();
+        let u = user.clone();
+        async move { cache.set(&key, &u, 300).await.ok(); }
+    });
+
+    Ok(user)
+}
+
+// Cache Invalidation (Write-Through)
+pub async fn update_user(&self, id: ObjectId, dto: UpdateDto) -> Result<User, Error> {
+    let user = self.repo.update(id, dto).await?;
+    self.cache.delete(&format!("user:{id}")).await.ok(); // Invalidate
     Ok(user)
 }
 ```
 
-### 3.5 Infrastructure Layer (Repositories)
-- **Return Types**: `create` MUST return `Result<ObjectId>`.
-- **Immutability**: Do NOT rely on internal mutation of the entity struct (Mongo driver doesn't update the passed struct in Rust).
-- **BSON 3**: Use `bson` 3 features (e.g., `inserted_id.as_object_id()`).
-
-**Example Repository**:
+### 5.3 Concurrency Patterns
 ```rust
-pub async fn create(&self, user: &User) -> Result<ObjectId, Error> {
-    let result = self.collection.insert_one(user).await?;
-    Ok(result.inserted_id.as_object_id().unwrap_or_default())
+// Parallel Aggregation (Reduce latency)
+pub async fn get_dashboard(&self, user_id: ObjectId) -> Result<Dashboard, Error> {
+    let (orders, stats, notifications) = tokio::try_join!(
+        self.orders_repo.find_by_user(user_id),
+        self.stats_repo.get_summary(user_id),
+        self.notif_repo.get_unread(user_id),
+    )?;
+    Ok(Dashboard { orders, stats, notifications })
+}
+
+// Work Stealing (Process queue items)
+use tokio::sync::mpsc;
+let (tx, mut rx) = mpsc::channel(100);
+
+// Producer
+tokio::spawn(async move {
+    for item in get_queue_items().await {
+        tx.send(item).await.ok();
+    }
+});
+
+// Consumer Pool
+for _ in 0..num_cpus::get() {
+    let mut rx = rx.clone();
+    tokio::spawn(async move {
+        while let Some(item) = rx.recv().await {
+            process(item).await;
+        }
+    });
 }
 ```
 
-### 3.6 Presentation Layer (HTTP)
-- **Routes**: Define router in `presentation/http/mod.rs` or specific sub-modules.
-- **Path Params**: Use `{id}` syntax (NOT `:id`).
-- **DTOs**: 
-  - Implement `From<Entity>` for ResponseDTOs.
-  - Unwrap IDs safely: `id: entity.id.unwrap().to_hex()`.
-  - Validate inputs using `validator`.
-  - derive `ToSchema` for OpenAPI.
+### 5.4 Memory Optimization
+```rust
+// Use SmallVec for stack-allocated vectors (hot paths)
+use smallvec::SmallVec;
+let ids: SmallVec<[ObjectId; 8]> = SmallVec::new(); // Stack if ≤8 items
 
-## 4. High-Performance Agent Guidelines
+// Intern Strings (De-duplicate repeated strings)
+use string_cache::DefaultAtom as Atom;
+let status: Atom = "pending".into(); // Interned, cheap to clone
 
-### 4.1 Implementation Strategy
-1.  **Analyze**: Understand the goal and the affected layers.
-2.  **Plan**: Determine dependencies (Does `Orders` need `Users`? Inject `Arc<UsersRepository>`).
-3.  **Execute**:
-    - **Domain**: Create/Update Entity.
-    - **Infrastructure**: Create/Update Repository (ensure `ObjectId` return).
-    - **Application**: Create/Update Service (orchestration + ID handling).
-    - **Presentation**: Create/Update DTOs and Routes.
-    - **Wiring**: Register in `main.rs`, `state.rs`, `presentation/http/mod.rs`.
+// Lazy Static (Avoid re-computing constants)
+use once_cell::sync::Lazy;
+static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[^@]+@[^@]+$").unwrap());
+```
 
-### 4.2 Coding Standards
-- **Imports**: ALWAYS use `crate::...` absolute paths to avoid ambiguity.
-- **Visibility**: Make fields `pub` in Domain/DTOs.
-- **Error Handling**: Use `?` propagation. Map db errors to `domain::error::Error`.
-- **Async**: Use `tokio` primitives. Avoid blocking operations.
+### 5.5 Monitoring & Profiling
+```rust
+// Structured Logging (tracing spans)
+use tracing::{info, instrument};
 
-### 4.3 Efficiency Rules (For the Agent)
-- **Check Imports**: After moving files, ALWAYS check and fix imports (`crate::features` no longer exists).
-- **Check Compilation**: Run `cargo check` after significant refactors.
-- **Clean Up**: Remove unused imports immediately.
-- **No Hallucinations**: Do not invent crates or modules. Verify with `read_file` or `list_directory`.
+#[instrument(skip(self), fields(user_id = %id))]
+pub async fn get_user(&self, id: ObjectId) -> Result<User, Error> {
+    info!("Fetching user");
+    let user = self.repo.find_by_id(id).await?;
+    info!(email = %user.email, "User found");
+    Ok(user)
+}
 
-## 5. Common Tasks Cheat Sheet
+// Metrics (Prometheus-compatible)
+use metrics::{counter, histogram};
+counter!("users.created").increment(1);
+histogram!("db.query.duration").record(duration.as_secs_f64());
+```
 
-### Adding a New Feature (e.g., `payments`)
-1.  **Domain**: `src/domain/payments.rs` (Struct `Payment`)
-2.  **Repo**: `src/infrastructure/persistence/payments.rs` (Struct `PaymentsRepository`)
-3.  **Service**: `src/application/payments.rs` (Struct `PaymentsService`)
-4.  **Presentation**: `src/presentation/http/payments/{routes.rs, dtos.rs}`
-5.  **State**: Add `payments_service: Arc<PaymentsService>` to `AppState`.
-6.  **Main**: Init Repo, Init Service, Add to State.
-7.  **Router**: Nest `/payments` in `app_router`.
-8.  **OpenAPI**: Register paths and components in `openapi.rs`.
+## 6. Quick Reference: Common Fixes
 
-### Fixing "ObjectId not found"
-- Add `use mongodb::bson::oid::ObjectId;`
+| Error | Solution |
+|-------|----------|
+| `ObjectId not found` | `use mongodb::bson::oid::ObjectId;` |
+| `ToSchema not in scope` | `use utoipa::ToSchema;` + `#[derive(ToSchema)]` |
+| `cannot borrow as mutable` | Use `let mut x` or `&mut self` |
+| `future cannot be sent` | Ensure types are `Send` (no Rc, use Arc) |
+| `borrowed value does not live long enough` | Add lifetime `'a` or `.clone()` |
+| `the trait bound ... is not satisfied` | Check derives: `Clone`, `Serialize`, `FromRef` |
 
-### Fixing "Schema not found"
-- Add `use utoipa::ToSchema;` and derive it on DTOs.
+## 7. Testing Strategy
 
-## 6. Testing
-- Unit tests go in the same file (bottom) or `tests/` folder.
-- Use `mockall` if you strictly need to mock repositories (though concrete types are preferred for simplicity in this template).
+```rust
+// Unit Test (Domain logic - no I/O)
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_user_validation() {
+        let user = User { id: None, email: "test@test.com".into() };
+        assert!(user.is_valid_email());
+    }
+}
+
+// Integration Test (Full stack)
+// tests/api_tests.rs
+use axum_test::TestServer;
+
+#[tokio::test]
+async fn test_create_user() {
+    let app = create_test_app().await;
+    let server = TestServer::new(app).unwrap();
+
+    let res = server.post("/users")
+        .json(&json!({"email": "new@test.com"}))
+        .await;
+
+    assert_eq!(res.status(), 201);
+}
+
+// Load Test (Criterion benchmarks)
+// benches/throughput.rs
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
+
+fn bench_user_creation(c: &mut Criterion) {
+    c.bench_function("create_user", |b| {
+        b.iter(|| create_user_sync(black_box("test@test.com")));
+    });
+}
+criterion_group!(benches, bench_user_creation);
+criterion_main!(benches);
+```
+
+## 8. Production Checklist
+
+**Before Deployment**:
+- [ ] All DB queries have indexes (`explain()` shows index usage)
+- [ ] Connection pools configured (MongoDB: default 100, adjust per load)
+- [ ] Graceful shutdown (SIGTERM handler in `main.rs`)
+- [ ] Health checks (`GET /health` returns DB + Redis status)
+- [ ] Rate limiting (Tower middleware: `tower_governor`)
+- [ ] Compression enabled (`CompressionLayer::new()`)
+- [ ] CORS configured (production domains only)
+- [ ] Env vars validated at startup (`config.rs` panics on missing vars)
+- [ ] Logging level = `info` in prod (not `debug`)
+- [ ] Secrets in vault/k8s secrets (NOT `.env` in container)
+
+**Monitoring**:
+- [ ] Latency: p50, p95, p99 (target: <100ms, <500ms, <1s)
+- [ ] Error rate: <0.1% for 5xx errors
+- [ ] Memory: <80% of allocated (watch for leaks)
+- [ ] CPU: <70% avg (headroom for spikes)
+- [ ] DB connections: <50% of pool size (indicates saturation if higher)
+
+## 9. Advanced Patterns (Monolith → Distributed Evolution)
+
+### 9.1 Modular Monolith Structure
+```
+Cargo.toml
+[workspace]
+members = ["crates/core", "crates/users", "crates/orders", "crates/api"]
+
+[dependencies]
+core = { path = "crates/core" }
+users = { path = "crates/users", optional = true }
+orders = { path = "crates/orders", optional = true }
+
+[features]
+default = ["users", "orders"]
+minimal = [] # Compile only core
+```
+
+```rust
+// Conditional compilation (crates/api/main.rs)
+#[cfg(feature = "users")]
+app = app.nest("/users", users::routes(state.clone()));
+
+#[cfg(feature = "orders")]
+app = app.nest("/orders", orders::routes(state.clone()));
+```
+
+### 9.2 Event-Driven Communication (Decoupling Modules)
+```rust
+// core/events.rs
+use tokio::sync::broadcast;
+
+pub enum DomainEvent {
+    UserCreated { id: ObjectId, email: String },
+    OrderPlaced { id: ObjectId, user_id: ObjectId },
+}
+
+pub struct EventBus {
+    tx: broadcast::Sender<DomainEvent>,
+}
+
+impl EventBus {
+    pub fn publish(&self, event: DomainEvent) {
+        self.tx.send(event).ok(); // Fire-and-forget
+    }
+
+    pub fn subscribe(&self) -> broadcast::Receiver<DomainEvent> {
+        self.tx.subscribe()
+    }
+}
+
+// application/users.rs
+pub async fn create(&self, dto: CreateUserDto) -> Result<User, Error> {
+    let user = self.repo.create(dto).await?;
+    self.events.publish(DomainEvent::UserCreated { id: user.id.unwrap(), email: user.email.clone() });
+    Ok(user)
+}
+
+// application/notifications.rs (listener)
+pub async fn listen_events(events: Arc<EventBus>) {
+    let mut rx = events.subscribe();
+    while let Ok(event) = rx.recv().await {
+        match event {
+            DomainEvent::UserCreated { email, .. } => {
+                send_welcome_email(&email).await.ok();
+            }
+            _ => {}
+        }
+    }
+}
+```
+
+### 9.3 Background Jobs (Offload Heavy Work)
+```rust
+// infrastructure/queue.rs
+use tokio::sync::mpsc;
+
+pub struct JobQueue<T> {
+    tx: mpsc::Sender<T>,
+}
+
+impl<T: Send + 'static> JobQueue<T> {
+    pub fn new<F>(handler: F, workers: usize) -> Self
+    where
+        F: Fn(T) -> BoxFuture<'static, ()> + Send + Sync + Clone + 'static,
+    {
+        let (tx, rx) = mpsc::channel(1000);
+        for _ in 0..workers {
+            Self::spawn_worker(rx.clone(), handler.clone());
+        }
+        Self { tx }
+    }
+
+    pub async fn enqueue(&self, job: T) -> Result<(), Error> {
+        self.tx.send(job).await.map_err(|_| Error::QueueFull)
+    }
+
+    fn spawn_worker<F>(mut rx: mpsc::Receiver<T>, handler: F)
+    where
+        F: Fn(T) -> BoxFuture<'static, ()> + Send + 'static,
+    {
+        tokio::spawn(async move {
+            while let Some(job) = rx.recv().await {
+                handler(job).await;
+            }
+        });
+    }
+}
+
+// Usage
+let job_queue = JobQueue::new(|job: EmailJob| {
+    Box::pin(async move { send_email(&job.to, &job.body).await.ok(); })
+}, 4);
+
+job_queue.enqueue(EmailJob { to: "user@test.com".into(), body: "Welcome!".into() }).await?;
+```
+
+### 9.4 Circuit Breaker (Resilience for External APIs)
+```rust
+use std::sync::atomic::{AtomicU64, Ordering};
+use tokio::time::{sleep, Duration};
+
+pub struct CircuitBreaker {
+    failure_count: AtomicU64,
+    threshold: u64,
+    timeout: Duration,
+}
+
+impl CircuitBreaker {
+    pub async fn call<F, T>(&self, f: F) -> Result<T, Error>
+    where
+        F: Future<Output = Result<T, Error>>,
+    {
+        if self.failure_count.load(Ordering::Relaxed) >= self.threshold {
+            return Err(Error::CircuitOpen);
+        }
+
+        match f.await {
+            Ok(v) => {
+                self.failure_count.store(0, Ordering::Relaxed);
+                Ok(v)
+            }
+            Err(e) => {
+                self.failure_count.fetch_add(1, Ordering::Relaxed);
+                if self.failure_count.load(Ordering::Relaxed) >= self.threshold {
+                    tokio::spawn({
+                        let cb = self.clone();
+                        async move {
+                            sleep(cb.timeout).await;
+                            cb.failure_count.store(0, Ordering::Relaxed); // Reset
+                        }
+                    });
+                }
+                Err(e)
+            }
+        }
+    }
+}
+```
+
+### 9.5 Multi-Tenancy (Shared Infrastructure, Isolated Data)
+```rust
+// Domain entity with tenant_id
+#[derive(Serialize, Deserialize)]
+pub struct User {
+    pub id: Option<ObjectId>,
+    pub tenant_id: ObjectId, // Partition key
+    pub email: String,
+}
+
+// Middleware: Extract tenant from JWT/header
+pub async fn tenant_middleware(
+    State(state): State<AppState>,
+    mut req: Request,
+    next: Next,
+) -> Response {
+    let tenant_id = extract_tenant_from_auth(&req).unwrap_or_default();
+    req.extensions_mut().insert(TenantId(tenant_id));
+    next.run(req).await
+}
+
+// Repository: Auto-filter by tenant
+pub async fn find_by_id(&self, id: ObjectId, tenant_id: ObjectId) -> Result<User, Error> {
+    self.collection
+        .find_one(doc! { "_id": id, "tenant_id": tenant_id })
+        .await?
+        .ok_or(Error::NotFound)
+}
+
+// Index for tenant queries
+// db.users.createIndex({ "tenant_id": 1, "_id": 1 })
+```
+
+### 9.6 Rate Limiting (Per-User, Per-IP)
+```rust
+use tower_governor::{Governor, GovernorConfigBuilder};
+use std::sync::Arc;
+
+pub fn rate_limit_layer() -> Governor<RateLimitKey> {
+    let config = Box::new(
+        GovernorConfigBuilder::default()
+            .per_second(10)
+            .burst_size(20)
+            .finish()
+            .unwrap(),
+    );
+    Governor::new(config)
+}
+
+// Custom key extractor
+#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+pub enum RateLimitKey {
+    Ip(IpAddr),
+    User(ObjectId),
+}
+
+impl KeyExtractor for RateLimitKey {
+    fn extract(&self, req: &Request) -> Option<Self> {
+        req.extensions().get::<UserId>()
+            .map(|u| Self::User(u.0))
+            .or_else(|| req.extensions().get::<ConnectInfo<SocketAddr>>()
+                .map(|ci| Self::Ip(ci.ip())))
+    }
+}
+```
+
+## 10. Rust Performance Mental Models
+
+**Memory Hierarchy (Latency Pyramid)**
+```
+Stack allocation:         ~1 ns
+Heap allocation:        ~100 ns
+L1 cache hit:            ~1 ns
+L2 cache hit:            ~4 ns
+L3 cache hit:           ~20 ns
+RAM access:            ~100 ns
+Network (same DC):     ~500 μs
+SSD read:              ~100 μs
+Disk seek:              ~10 ms
+Network (internet):    ~100 ms
+```
+**Rule**: Cache hot paths. Use `&[u8]` over `Vec<u8>`. Batch network calls.
+
+**Async Runtime Cost**
+- Spawning task: ~1-5 μs (cheaper than OS thread's ~50 μs)
+- Context switch: ~200 ns (vs 1-10 μs for threads)
+- **When to use threads**: CPU-bound work (image processing, crypto)
+- **When to use async**: I/O-bound work (DB, HTTP, file I/O)
+
+**Zero-Cost Abstractions Verified**
+```rust
+// These compile to IDENTICAL machine code:
+let sum1 = vec.iter().sum::<u64>();
+
+let mut sum2 = 0;
+for &x in &vec { sum2 += x; }
+```
+**Rule**: Prefer iterators. Compiler optimizes them perfectly.
+
+---
+
+## Summary: Agent Decision Matrix
+
+| Task | Action | Tools |
+|------|--------|-------|
+| New feature | Bottom-up (Domain → Infra → App → API) | Follow §4.1 |
+| Performance issue | Profile → Identify bottleneck → §5 patterns | `cargo flamegraph` |
+| Scaling up | Module → Workspace → Feature flags (§2.2) | Cargo.toml |
+| Inter-module communication | Event bus (§9.2) or direct Arc<Service> | broadcast channel |
+| External API failure | Circuit breaker (§9.4) + retry logic | Exponential backoff |
+| Data isolation | Multi-tenancy (§9.5) + RLS policies | tenant_id filter |
+| High traffic | Cache (§5.2) + Rate limit (§9.6) + Indexes | Redis + Tower |
+
+**Final Directive**: Measure before optimizing. `cargo build --release` for benchmarks. Never sacrifice correctness for speed. Rust's type system IS the performance optimization.

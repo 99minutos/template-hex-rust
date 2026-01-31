@@ -1,58 +1,68 @@
-# 🦀 Rustlang Productivity Template: Layered Architecture + Granular DI
+# Rust Microservice Template
 
-This repository is a **High-Performance Rust Microservice Template** refactored to use a **Layered Architecture (Horizontal Slicing)** pattern. It emphasizes separation of concerns, granular dependency injection, and production-grade robustness using `axum`, `mongodb` (v3), and `tokio`.
+This is a template for building Rust microservices using a layered architecture. It uses `axum` for the web server and `mongodb` for the database.
 
-## 🏗 Philosophy: Separation of Concerns
+## Architecture
 
-Unlike vertical slices, this template organizes code by technical function (Layers). This ensures strict boundaries, testability, and a clear flow of data.
+The project is organized into layers to separate concerns:
 
-### Pillars of the Template:
-1.  **Strict Layering**:
-    *   **Presentation**: Entry points (HTTP, OpenAPI). Depends on Application.
-    *   **Application**: Business Logic & Orchestration. Depends on Domain & Infrastructure.
-    *   **Domain**: Pure Business Entities & Rules. Dependency-free.
-    *   **Infrastructure**: External details (DB, Providers). Depends on Domain.
-2.  **Granular Dependency Injection**:
-    *   Uses `axum::extract::FromRef` to inject *only* the specific service needed by a handler, avoiding monolithic state objects.
-3.  **Explicit ID Handling**:
-    *   IDs are managed explicitly. The Service generates/retrieves the ID from the Repository, ensuring the Domain Entity is always consistent.
+```text
+      Request
+         |
+         v
++------------------+
+|   Presentation   |  <-- Decodes HTTP requests, Validates input
++--------+---------+
+         | Calls Service
+         v
++--------+---------+      +----------------+
+|   Application    |----->|     Domain     |
+| (Business Logic) |      |    (Entities)  |
++--------+---------+      +-------^--------+
+         | Calls Repo             |
+         v                        |
++--------+---------+              |
+|  Infrastructure  |--------------+
+|   (Persistence)  |  Returns Entities
++------------------+
+```
 
----
+## Folder Structure
 
-## 📂 Project Structure
+Here is where everything is located:
 
 ```text
 src/
-├── domain/               # Enterprise Logic & Entities
-│   ├── users.rs          # Entity definitions (Option<ObjectId>)
+├── domain/               # Core business entities and logic (No external dependencies)
+│   ├── users.rs
 │   ├── products.rs
-│   └── error.rs          # Domain-wide Error types
-├── application/          # Use Cases & Services
-│   ├── users.rs          # Business rules & Orchestration
+│   └── error.rs
+├── application/          # Business logic and coordination (Services)
+│   ├── users.rs
 │   └── products.rs
-├── infrastructure/       # External Concerns
-│   ├── persistence/      # Repository implementations
+├── infrastructure/       # Database access and external tools
+│   ├── persistence/      # Repositories (Database operations)
 │   │   ├── users.rs
-│   │   └── mongo.rs      # DB Connection logic
-│   └── providers/        # 3rd party adapters (Redis, Telemetry)
-├── presentation/         # Entry Points
+│   │   └── mongo.rs
+│   └── providers/        # External services (Redis, etc.)
+├── presentation/         # API Layer
 │   ├── http/
-│   │   ├── users/        # Routes & DTOs
-│   │   ├── validation.rs # Axum Extractors
-│   │   └── response.rs   # Standard Response Wrappers
-│   ├── server.rs         # Server Setup
-│   ├── state.rs          # Dependency Injection State
-│   └── openapi.rs        # Swagger Registry
-├── config.rs             # Configuration
-└── main.rs               # Wiring & Entry Point
+│   │   ├── users/        # Routes and DTOs (Data Transfer Objects)
+│   │   ├── validation.rs # Input validation
+│   │   └── response.rs   # API responses
+│   ├── server.rs         # Server configuration
+│   ├── state.rs          # Dependency Injection setup
+│   └── openapi.rs        # API Documentation setup
+├── config.rs             # Configuration loading
+└── main.rs               # Application entry point
 ```
 
----
+## How to Add a New Feature
 
-## 🛠 Development Guide: Adding a New Feature (e.g., Payments)
+Example: Adding a **Payments** feature.
 
 ### 1. Domain Layer (`src/domain/payments.rs`)
-Define your entity.
+Define the data structure.
 ```rust
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Payment {
@@ -63,7 +73,7 @@ pub struct Payment {
 ```
 
 ### 2. Infrastructure Layer (`src/infrastructure/persistence/payments.rs`)
-Implement the repository. `create` must return the generated ID.
+Create the repository to handle database operations.
 ```rust
 pub struct PaymentRepository { collection: Collection<Payment> }
 
@@ -76,7 +86,7 @@ impl PaymentRepository {
 ```
 
 ### 3. Application Layer (`src/application/payments.rs`)
-Implement the service logic. Orchestrate the ID assignment.
+Create the service to handle business logic.
 ```rust
 pub struct PaymentService { repo: Arc<PaymentRepository> }
 
@@ -91,35 +101,30 @@ impl PaymentService {
 ```
 
 ### 4. Presentation Layer (`src/presentation/http/payments/`)
-Define DTOs (`dtos.rs`) and Routes (`routes.rs`).
+Define input data (`dtos.rs`) and API routes (`routes.rs`).
 ```rust
 // routes.rs
 #[utoipa::path(...)]
 pub async fn create_payment(
-    State(service): State<Arc<PaymentService>>, // Granular Injection
+    State(service): State<Arc<PaymentService>>, // Inject Service
     ValidatedJson(req): ValidatedJson<CreatePaymentDto>
 ) -> ...
 ```
 
-### 5. Wiring (`src/main.rs` & `src/presentation/state.rs`)
-1.  Initialize Repository and Service in `main.rs`.
-2.  Add Service to `AppState` in `state.rs`.
-3.  Register routes in `src/presentation/http/mod.rs`.
+### 5. Register Components
+1.  Initialize Repository and Service in `src/main.rs`.
+2.  Add the Service to `AppState` in `src/presentation/state.rs`.
+3.  Register the new routes in `src/presentation/http/mod.rs`.
 
----
+## Running the Project
 
-## ⚙️ Tech Stack
+1.  Copy the environment file:
+    ```bash
+    cp .env.example .env
+    ```
+2.  Run the application:
+    ```bash
+    cargo run
+    ```
 
-*   **REST API**: Axum 0.8.
-*   **Database**: MongoDB (v3 Driver, BSON 3).
-*   **Docs**: Swagger UI (`/api-docs/openapi.json` exposed at `/swagger-ui`).
-*   **Observability**: OpenTelemetry + Tracing.
-*   **Validation**: Strong typing via `validator`.
-
-## 📡 Local Execution
-
-```bash
-cp .env.example .env
-cargo run
-```
-Access interactive documentation at: **`http://localhost:3000/swagger-ui`**
+You can view the API documentation at: **`http://localhost:3000/swagger-ui`**
