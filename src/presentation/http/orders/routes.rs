@@ -1,13 +1,11 @@
-use crate::{
-    domain::error::Error,
-    presentation::{
-        http::{
-            orders::dtos::{CreateOrderDto, OrderResponseDto},
-            response::GenericApiResponse,
-            validation::ValidatedJson,
-        },
-        state::AppState,
+use crate::presentation::{
+    http::{
+        error::ApiError,
+        orders::dtos::{CreateOrderDto, OrderResponseDto},
+        response::GenericApiResponse,
+        validation::ValidatedJson,
     },
+    state::AppState,
 };
 use axum::{Router, extract::State, routing::post};
 
@@ -30,7 +28,7 @@ pub fn router() -> Router<AppState> {
 pub async fn create_order(
     State(service): State<std::sync::Arc<crate::application::orders::OrdersService>>,
     ValidatedJson(req): ValidatedJson<CreateOrderDto>,
-) -> Result<GenericApiResponse<OrderResponseDto>, Error> {
+) -> Result<GenericApiResponse<OrderResponseDto>, ApiError> {
     // Controller is super clean now
     let order = service.create_order(req).await?;
 

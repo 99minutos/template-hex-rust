@@ -1,13 +1,11 @@
-use crate::{
-    domain::error::Error,
-    presentation::{
-        http::{
-            products::dtos::{CreateProductDto, ProductResponseDto},
-            response::GenericApiResponse,
-            validation::ValidatedJson,
-        },
-        state::AppState,
+use crate::presentation::{
+    http::{
+        error::ApiError,
+        products::dtos::{CreateProductDto, ProductResponseDto},
+        response::GenericApiResponse,
+        validation::ValidatedJson,
     },
+    state::AppState,
 };
 use axum::{Router, extract::State, routing::post};
 
@@ -28,7 +26,7 @@ pub fn router() -> Router<AppState> {
 pub async fn create_product(
     State(service): State<std::sync::Arc<crate::application::products::ProductsService>>,
     ValidatedJson(req): ValidatedJson<CreateProductDto>,
-) -> Result<GenericApiResponse<ProductResponseDto>, Error> {
+) -> Result<GenericApiResponse<ProductResponseDto>, ApiError> {
     let product = service.create_product(req).await?;
     Ok(GenericApiResponse::success(product.into()))
 }
@@ -44,7 +42,7 @@ pub async fn create_product(
 #[tracing::instrument(skip_all)]
 pub async fn list_products(
     State(service): State<std::sync::Arc<crate::application::products::ProductsService>>,
-) -> Result<GenericApiResponse<Vec<ProductResponseDto>>, Error> {
+) -> Result<GenericApiResponse<Vec<ProductResponseDto>>, ApiError> {
     let products = service.list_products().await?;
     let dtos = products.into_iter().map(Into::into).collect();
     Ok(GenericApiResponse::success(dtos))

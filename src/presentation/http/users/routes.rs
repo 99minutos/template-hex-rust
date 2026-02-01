@@ -1,13 +1,11 @@
-use crate::{
-    domain::error::Error,
-    presentation::{
-        http::{
-            response::GenericApiResponse,
-            users::dtos::{CreateUserDto, UserResponseDto},
-            validation::ValidatedJson,
-        },
-        state::AppState,
+use crate::presentation::{
+    http::{
+        error::ApiError,
+        response::GenericApiResponse,
+        users::dtos::{CreateUserDto, UserResponseDto},
+        validation::ValidatedJson,
     },
+    state::AppState,
 };
 use axum::{
     Router,
@@ -34,7 +32,7 @@ pub fn router() -> Router<AppState> {
 pub async fn create_user(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
     ValidatedJson(req): ValidatedJson<CreateUserDto>,
-) -> Result<GenericApiResponse<UserResponseDto>, Error> {
+) -> Result<GenericApiResponse<UserResponseDto>, ApiError> {
     // Controller is now pure: Parse HTTP -> Call Service -> Return HTTP
     let user = service.create_user(req).await?;
     Ok(GenericApiResponse::success(user.into()))
@@ -52,7 +50,7 @@ pub async fn create_user(
 pub async fn get_user(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
     Path(id): Path<String>,
-) -> Result<GenericApiResponse<UserResponseDto>, Error> {
+) -> Result<GenericApiResponse<UserResponseDto>, ApiError> {
     let user = service.get_user(&id).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
@@ -68,7 +66,7 @@ pub async fn get_user(
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
-) -> Result<GenericApiResponse<Vec<UserResponseDto>>, Error> {
+) -> Result<GenericApiResponse<Vec<UserResponseDto>>, ApiError> {
     let users = service.list_users().await?;
     let dtos = users.into_iter().map(Into::into).collect();
     Ok(GenericApiResponse::success(dtos))
@@ -86,7 +84,7 @@ pub async fn list_users(
 pub async fn delete_user(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
     Path(id): Path<String>,
-) -> Result<GenericApiResponse<()>, Error> {
+) -> Result<GenericApiResponse<()>, ApiError> {
     service.delete_user(&id).await?;
     Ok(GenericApiResponse::success(()))
 }

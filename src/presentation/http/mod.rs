@@ -1,6 +1,7 @@
 use crate::presentation::state::AppState;
 use axum::Router;
 
+pub mod error;
 pub mod orders;
 pub mod products;
 pub mod response;

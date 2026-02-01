@@ -5,7 +5,7 @@ use axum::{
 use serde::de::DeserializeOwned;
 use validator::Validate;
 
-use crate::domain::error::Error;
+use crate::presentation::http::error::ApiError;
 
 #[derive(Debug, Clone, Copy, Default)]
 pub struct ValidatedJson<T>(pub T);
@@ -15,16 +15,16 @@ where
     T: DeserializeOwned + Validate,
     S: Send + Sync,
 {
-    type Rejection = Error;
+    type Rejection = ApiError;
 
     async fn from_request(req: Request, state: &S) -> Result<Self, Self::Rejection> {
         let Json(value) = Json::<T>::from_request(req, state)
             .await
-            .map_err(|e| Error::ValidationError(e.to_string()))?;
+            .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
         value
             .validate()
-            .map_err(|e| Error::ValidationError(e.to_string()))?;
+            .map_err(|e| ApiError::BadRequest(e.to_string()))?;
 
         Ok(ValidatedJson(value))
     }
