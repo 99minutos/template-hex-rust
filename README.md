@@ -11,7 +11,7 @@ The project is organized into layers to separate concerns:
          |
          v
 +------------------+
-|   Presentation   |  <-- Decodes HTTP requests, Validates input
+|   Presentation   |  <-- Decodes requests, Validates input, Maps Output DTOs
 +--------+---------+
          | Calls Service
          v
@@ -47,7 +47,7 @@ src/
 │   └── providers/        # External services (Redis, etc.)
 ├── presentation/         # API Layer
 │   ├── http/
-│   │   ├── users/        # Routes and DTOs (Data Transfer Objects)
+│   │   ├── users/        # Routes and DTOs (Input/Output)
 │   │   ├── validation.rs # Input validation
 │   │   └── response.rs   # API responses
 │   ├── server.rs         # Server configuration
@@ -113,16 +113,33 @@ impl PaymentService {
 
 ### 4. Presentation Layer (`src/presentation/http/payments/`)
 
-Define input data (`dtos.rs`) and API routes (`routes.rs`).
+Define input/output data (`dtos.rs`) and API routes (`routes.rs`).
 
 ```rust
+// dtos.rs
+#[derive(Serialize, ToSchema)]
+pub struct PaymentResponse {
+    pub id: ObjectId,
+    pub amount: f64,
+}
+
+impl From<Payment> for PaymentResponse {
+    fn from(p: Payment) -> Self {
+        Self { id: p.id.expect("ID must exist"), amount: p.amount }
+    }
+}
+
 // routes.rs
 #[utoipa::path(...)]
 #[tracing::instrument(skip_all)]
 pub async fn create_payment(
-    State(service): State<Arc<PaymentService>>, // Inject Service
+    State(service): State<Arc<PaymentService>>,
     ValidatedJson(req): ValidatedJson<CreatePaymentDto>
-) -> ...
+) -> Result<Json<PaymentResponse>, ApiError> {
+    let payment = service.create(req).await?;
+    // Never expose Domain entity directly
+    Ok(Json(PaymentResponse::from(payment)))
+}
 ```
 
 ### 5. Register Components

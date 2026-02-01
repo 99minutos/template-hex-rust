@@ -69,9 +69,14 @@ src/
 HTTP → Handler → Service → Repo → DB
  ↓        ↓         ↓       ↓      ↓
 DTO  → Validate → Logic → Query → Entity
+(Req)                                 │
+ ↑                                    │
+DTO ← Handler ← Service ← Entity ─────┘
+(Res)   (Map)
 ```
 **Rules**:
 - Controllers NEVER call Repos directly
+- Handlers NEVER expose Domain Entities directly (MUST map to Response DTOs)
 - Services MAY call multiple Repos (compose operations)
 - Repos NEVER contain business logic (only data mapping)
 
@@ -211,7 +216,9 @@ pub async fn create_user(
     ValidatedJson(dto): ValidatedJson<CreateUserDto>, // Validates BEFORE handler
 ) -> Result<Json<UserResponse>, ApiError> {
     let user = svc.create(dto).await?;
-    Ok(Json(user.into())) // From<User> for UserResponse
+    // STRICT RULE: Never return 'user' (Domain) directly.
+    // Always map to a DTO to avoid leaking internal structure or sensitive data.
+    Ok(Json(UserResponse::from(user)))
 }
 
 // Optimization: Stream large responses (avoid buffering)
@@ -224,6 +231,7 @@ pub async fn list_users_stream(
 ```
 **Perf Wins**:
 - `ValidatedJson` = reject invalid early (saves Service invocation)
+- **Output DTOs** = Mandatory separation between Domain and API contract
 - Path params = `axum::extract::Path<String>` (no regex, O(1) routing)
 - Compression middleware: `tower_http::compression` (gzip response bodies >1KB)
 
@@ -234,7 +242,7 @@ pub async fn list_users_stream(
 1. Domain   → Define entity (struct, no logic yet)
 2. Infra    → Repo methods (CRUD + indexes)
 3. App      → Service (business rules, multi-repo orchestration)
-4. Present  → DTOs (validation) + Routes (handlers)
+4. Present  → DTOs (Input validation & Output responses) + Routes (handlers)
 5. Wire     → main.rs (DI), state.rs (AppState), http/mod.rs (router)
 6. Document → openapi.rs (register paths/schemas)
 7. Test     → Integration test (happy path + edge cases)
@@ -270,7 +278,8 @@ impl OrdersService {
     }
 }
 
-// 4. presentation/http/orders/{routes.rs, dtos.rs}
+// 4. presentation/http/orders/{routes.rs, dtos.rs} 
+//    Note: dtos.rs must include both CreateOrderDto and OrderResponse
 // 5. main.rs: let orders_repo = Arc::new(OrdersRepository::new(...));
 //             let orders_svc = Arc::new(OrdersService::new(orders_repo, users_repo));
 // 6. state.rs: pub orders: Arc<OrdersService>
@@ -370,6 +379,7 @@ pub fn normalize<'a>(s: &'a str) -> Cow<'a, str> {
 **Zero Tolerance**:
 - ❌ Hallucinating crate names (e.g., `use fake_crate::Something;`)
 - ❌ Breaking layer rules (e.g., Domain importing Axum)
+- ❌ Exposing Domain Entities directly in Handlers (Always use Response DTOs)
 - ❌ Ignoring compilation errors in responses
 - ❌ Using blocking I/O in async context (`std::fs` → `tokio::fs`)
 
