@@ -15,6 +15,7 @@ impl ProductsService {
         Self { repo }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn create_product(&self, dto: CreateProductDto) -> Result<Product, Error> {
         let mut product = Product {
             id: None,
@@ -27,12 +28,14 @@ impl ProductsService {
         Ok(product)
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn list_products(&self) -> Result<Vec<Product>, Error> {
         Ok(self.repo.find_all().await?)
     }
 
     // Internal helper for other services if needed,
     // though usually they go through repository or public service methods
+    #[tracing::instrument(skip_all)]
     pub async fn get_product(&self, id: &str) -> Result<Product, Error> {
         self.repo
             .find_by_id(id)

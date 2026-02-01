@@ -1,7 +1,7 @@
+use crate::presentation::http::response::GenericApiResponse;
 use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use thiserror::Error;
-use crate::presentation::http::response::GenericApiResponse;
 
 #[derive(Error, Debug)]
 pub enum Error {
@@ -37,8 +37,11 @@ impl IntoResponse for Error {
             Error::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg.clone()),
             Error::DatabaseError(e) => {
                 tracing::error!("Database error: {:?}", e);
-                (StatusCode::INTERNAL_SERVER_ERROR, "Database error".to_string())
-            },
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "Database error".to_string(),
+                )
+            }
             Error::InternalError(msg) => {
                 tracing::error!("Internal error: {:?}", msg);
                 (

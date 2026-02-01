@@ -35,7 +35,6 @@ where
 }
 
 impl<T> GenericApiResponse<T> {
-
     fn get_current_trace_id() -> String {
         let context = tracing::Span::current().context();
         let span = context.span();

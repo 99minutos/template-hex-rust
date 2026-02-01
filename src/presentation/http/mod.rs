@@ -1,11 +1,11 @@
 use crate::presentation::state::AppState;
 use axum::Router;
 
-pub mod users;
-pub mod products;
 pub mod orders;
-pub mod validation;
+pub mod products;
 pub mod response;
+pub mod users;
+pub mod validation;
 
 pub fn app_router() -> Router<AppState> {
     Router::new()

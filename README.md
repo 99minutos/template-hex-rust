@@ -62,7 +62,9 @@ src/
 Example: Adding a **Payments** feature.
 
 ### 1. Domain Layer (`src/domain/payments.rs`)
+
 Define the data structure.
+
 ```rust
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Payment {
@@ -73,11 +75,14 @@ pub struct Payment {
 ```
 
 ### 2. Infrastructure Layer (`src/infrastructure/persistence/payments.rs`)
+
 Create the repository to handle database operations.
+
 ```rust
 pub struct PaymentRepository { collection: Collection<Payment> }
 
 impl PaymentRepository {
+    #[tracing::instrument(skip_all)]
     pub async fn create(&self, p: &Payment) -> Result<ObjectId> {
         let res = self.collection.insert_one(p).await?;
         Ok(res.inserted_id.as_object_id().unwrap_or_default())
@@ -86,13 +91,19 @@ impl PaymentRepository {
 ```
 
 ### 3. Application Layer (`src/application/payments.rs`)
+
 Create the service to handle business logic.
+
 ```rust
 pub struct PaymentService { repo: Arc<PaymentRepository> }
 
 impl PaymentService {
+    #[tracing::instrument(skip_all)]
     pub async fn create(&self, dto: CreatePaymentDto) -> Result<Payment, Error> {
-        let mut payment = Payment { id: None, amount: dto.amount };
+        let mut payment = Payment {
+            id: None,
+            amount: dto.amount,
+        };
         let id = self.repo.create(&payment).await?;
         payment.id = Some(id);
         Ok(payment)
@@ -101,10 +112,13 @@ impl PaymentService {
 ```
 
 ### 4. Presentation Layer (`src/presentation/http/payments/`)
+
 Define input data (`dtos.rs`) and API routes (`routes.rs`).
+
 ```rust
 // routes.rs
 #[utoipa::path(...)]
+#[tracing::instrument(skip_all)]
 pub async fn create_payment(
     State(service): State<Arc<PaymentService>>, // Inject Service
     ValidatedJson(req): ValidatedJson<CreatePaymentDto>
@@ -112,6 +126,7 @@ pub async fn create_payment(
 ```
 
 ### 5. Register Components
+
 1.  Initialize Repository and Service in `src/main.rs`.
 2.  Add the Service to `AppState` in `src/presentation/state.rs`.
 3.  Register the new routes in `src/presentation/http/mod.rs`.

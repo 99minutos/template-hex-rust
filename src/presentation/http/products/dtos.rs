@@ -1,7 +1,7 @@
+use crate::domain::products::Product;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
-use crate::domain::products::Product;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateProductDto {

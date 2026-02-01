@@ -1,7 +1,7 @@
+use crate::domain::orders::Order;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
-use crate::domain::orders::Order;
 
 #[derive(Debug, Deserialize, Validate, ToSchema)]
 pub struct CreateOrderDto {

@@ -11,8 +11,8 @@ use tower_http::{
 use utoipa::OpenApi;
 use utoipa_swagger_ui::SwaggerUi;
 
-use crate::presentation::http;
 use crate::config;
+use crate::presentation::http;
 use crate::presentation::state::AppState;
 
 pub struct ServerLauncher {

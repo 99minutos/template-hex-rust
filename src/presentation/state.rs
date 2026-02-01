@@ -1,10 +1,6 @@
-use std::sync::Arc;
+use crate::application::{orders::OrdersService, products::ProductsService, users::UsersService};
 use axum::extract::FromRef;
-use crate::application::{
-    users::UsersService,
-    products::ProductsService,
-    orders::OrdersService,
-};
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {

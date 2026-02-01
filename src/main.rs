@@ -1,25 +1,19 @@
 mod config;
 
 // Layered Architecture Modules
-mod domain;
 mod application;
+mod domain;
 mod infrastructure;
 mod presentation;
 
-use crate::presentation::server::ServerLauncher;
 use crate::infrastructure::providers::mongo::MongoProvider;
+use crate::presentation::server::ServerLauncher;
 use crate::presentation::state::AppState;
 use std::sync::Arc;
 
+use crate::application::{orders::OrdersService, products::ProductsService, users::UsersService};
 use crate::infrastructure::persistence::{
-    users::UsersRepository,
-    products::ProductsRepository,
-    orders::OrdersRepository,
-};
-use crate::application::{
-    users::UsersService,
-    products::ProductsService,
-    orders::OrdersService,
+    orders::OrdersRepository, products::ProductsRepository, users::UsersRepository,
 };
 
 #[tokio::main]
@@ -44,15 +38,11 @@ async fn main() {
     let users_repo = Arc::new(UsersRepository::new(&db));
     let products_repo = Arc::new(ProductsRepository::new(&db));
     let orders_repo = Arc::new(OrdersRepository::new(&db));
-    
+
     // 2. Initialize Services
     let users_service = Arc::new(UsersService::new(users_repo.clone()));
     let products_service = Arc::new(ProductsService::new(products_repo.clone()));
-    let orders_service = Arc::new(OrdersService::new(
-        orders_repo,
-        users_repo,
-        products_repo
-    ));
+    let orders_service = Arc::new(OrdersService::new(orders_repo, users_repo, products_repo));
 
     // 3. Wire State
     let state = AppState {
@@ -61,8 +51,5 @@ async fn main() {
         orders_service,
     };
 
-    ServerLauncher::new(state)
-        .with_http(env.port)
-        .run()
-        .await;
+    ServerLauncher::new(state).with_http(env.port).run().await;
 }

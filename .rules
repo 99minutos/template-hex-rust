@@ -359,6 +359,7 @@ pub fn normalize<'a>(s: &'a str) -> Cow<'a, str> {
 - [ ] Check `Cargo.toml` for available dependencies (no guessing)
 - [ ] Use `crate::` absolute imports (NEVER `super::super::`)
 - [ ] Verify layer dependencies (Domain NEVER imports Application)
+- [ ] Apply `#[tracing::instrument(skip_all)]` to all new functions (excluding `new`)
 
 **Post-Implementation Checklist**:
 - [ ] Run `cargo check` (compile errors)
@@ -482,13 +483,13 @@ static EMAIL_REGEX: Lazy<Regex> = Lazy::new(|| Regex::new(r"^[^@]+@[^@]+$").unwr
 ### 5.5 Monitoring & Profiling
 ```rust
 // Structured Logging (tracing spans)
-use tracing::{info, instrument};
+// MANDATORY: Add #[tracing::instrument(skip_all)] to all handlers, services, and repo methods.
+// EXCEPTION: 'new' constructors or trivial getters.
 
-#[instrument(skip(self), fields(user_id = %id))]
+#[tracing::instrument(skip_all)]
 pub async fn get_user(&self, id: ObjectId) -> Result<User, Error> {
-    info!("Fetching user");
+    tracing::info!(user_id = %id, "Fetching user");
     let user = self.repo.find_by_id(id).await?;
-    info!(email = %user.email, "User found");
     Ok(user)
 }
 

@@ -1,7 +1,7 @@
+use crate::domain::users::User;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
-use crate::domain::users::User;
 
 #[derive(Deserialize, ToSchema, Validate)]
 pub struct CreateUserDto {

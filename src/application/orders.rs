@@ -29,6 +29,7 @@ impl OrdersService {
         }
     }
 
+    #[tracing::instrument(skip_all)]
     pub async fn create_order(&self, dto: CreateOrderDto) -> Result<Order, Error> {
         // 1. Validate User
         // Note: We access repository directly.

@@ -30,6 +30,7 @@ pub fn router() -> Router<AppState> {
         (status = 200, description = "User created", body = GenericApiResponse<UserResponseDto>)
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn create_user(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
     ValidatedJson(req): ValidatedJson<CreateUserDto>,
@@ -47,6 +48,7 @@ pub async fn create_user(
         (status = 200, description = "Get user", body = GenericApiResponse<UserResponseDto>)
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn get_user(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
     Path(id): Path<String>,
@@ -63,6 +65,7 @@ pub async fn get_user(
         (status = 200, description = "List users", body = GenericApiResponse<Vec<UserResponseDto>>)
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
 ) -> Result<GenericApiResponse<Vec<UserResponseDto>>, Error> {
@@ -79,6 +82,7 @@ pub async fn list_users(
         (status = 200, description = "Delete user")
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn delete_user(
     State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
     Path(id): Path<String>,

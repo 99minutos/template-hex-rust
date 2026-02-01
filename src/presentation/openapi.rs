@@ -1,6 +1,6 @@
-use utoipa::OpenApi;
-use crate::presentation::http::{users, products, orders};
 use crate::presentation::http::response::GenericApiResponse;
+use crate::presentation::http::{orders, products, users};
+use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(

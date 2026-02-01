@@ -1,23 +1,18 @@
-use axum::{
-    extract::State,
-    routing::post,
-    Router,
-};
 use crate::{
     domain::error::Error,
     presentation::{
         http::{
+            products::dtos::{CreateProductDto, ProductResponseDto},
             response::GenericApiResponse,
             validation::ValidatedJson,
-            products::dtos::{CreateProductDto, ProductResponseDto},
         },
         state::AppState,
     },
 };
+use axum::{Router, extract::State, routing::post};
 
 pub fn router() -> Router<AppState> {
-    Router::new()
-        .route("/", post(create_product).get(list_products))
+    Router::new().route("/", post(create_product).get(list_products))
 }
 
 #[utoipa::path(
@@ -29,6 +24,7 @@ pub fn router() -> Router<AppState> {
         (status = 200, description = "Product created", body = GenericApiResponse<ProductResponseDto>)
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn create_product(
     State(service): State<std::sync::Arc<crate::application::products::ProductsService>>,
     ValidatedJson(req): ValidatedJson<CreateProductDto>,
@@ -45,6 +41,7 @@ pub async fn create_product(
         (status = 200, description = "List products", body = GenericApiResponse<Vec<ProductResponseDto>>)
     )
 )]
+#[tracing::instrument(skip_all)]
 pub async fn list_products(
     State(service): State<std::sync::Arc<crate::application::products::ProductsService>>,
 ) -> Result<GenericApiResponse<Vec<ProductResponseDto>>, Error> {
