@@ -57,8 +57,8 @@ impl OrdersService {
             product_id: product.id.unwrap(),
             quantity: dto.quantity,
             total_price,
-            created_at: bson::DateTime::now(),
-            updated_at: bson::DateTime::now(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
 
         let id = self.orders_repo.create(&order).await?;

@@ -29,8 +29,8 @@ impl UsersService {
             id: None,
             name: dto.name,
             email: dto.email,
-            created_at: bson::DateTime::now(),
-            updated_at: bson::DateTime::now(),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
         };
 
         let id = self.repo.create(&user).await?;

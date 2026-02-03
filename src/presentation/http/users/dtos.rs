@@ -26,8 +26,8 @@ impl From<User> for UserResponseDto {
             id: user.id.unwrap().to_hex(),
             name: user.name,
             email: user.email,
-            created_at: user.created_at.to_chrono().to_rfc3339(),
-            updated_at: user.updated_at.to_chrono().to_rfc3339(),
+            created_at: user.created_at.to_rfc3339(),
+            updated_at: user.updated_at.to_rfc3339(),
         }
     }
 }

@@ -31,7 +31,7 @@ impl From<Order> for OrderResponseDto {
             product_id: order.product_id.to_hex(),
             quantity: order.quantity,
             total_price: order.total_price,
-            created_at: order.created_at.to_chrono().to_rfc3339(),
+            created_at: order.created_at.to_rfc3339(),
         }
     }
 }
