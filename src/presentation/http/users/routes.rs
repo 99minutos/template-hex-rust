@@ -1,8 +1,9 @@
+use crate::application::users::UsersService;
 use crate::presentation::{
     http::{
         error::ApiError,
         response::GenericApiResponse,
-        users::dtos::{CreateUserDto, UserResponseDto},
+        users::dtos::{CreateUserInput, UserOutput},
         validation::ValidatedJson,
     },
     state::AppState,
@@ -12,6 +13,7 @@ use axum::{
     extract::{Path, State},
     routing::{get, post},
 };
+use std::sync::Arc;
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -23,17 +25,16 @@ pub fn router() -> Router<AppState> {
     post,
     path = "/api/v1/users",
     tag = "Users",
-    request_body = CreateUserDto,
+    request_body = CreateUserInput,
     responses(
-        (status = 200, description = "User created", body = GenericApiResponse<UserResponseDto>)
+        (status = 200, description = "User created", body = GenericApiResponse<UserOutput>)
     )
 )]
 #[tracing::instrument(skip_all)]
 pub async fn create_user(
-    State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
-    ValidatedJson(req): ValidatedJson<CreateUserDto>,
-) -> Result<GenericApiResponse<UserResponseDto>, ApiError> {
-    // Controller is now pure: Parse HTTP -> Call Service -> Return HTTP
+    State(service): State<Arc<UsersService>>,
+    ValidatedJson(req): ValidatedJson<CreateUserInput>,
+) -> Result<GenericApiResponse<UserOutput>, ApiError> {
     let user = service.create_user(req).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
@@ -43,14 +44,14 @@ pub async fn create_user(
     path = "/api/v1/users/{id}",
     tag = "Users",
     responses(
-        (status = 200, description = "Get user", body = GenericApiResponse<UserResponseDto>)
+        (status = 200, description = "Get user", body = GenericApiResponse<UserOutput>)
     )
 )]
 #[tracing::instrument(skip_all)]
 pub async fn get_user(
-    State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
+    State(service): State<Arc<UsersService>>,
     Path(id): Path<String>,
-) -> Result<GenericApiResponse<UserResponseDto>, ApiError> {
+) -> Result<GenericApiResponse<UserOutput>, ApiError> {
     let user = service.get_user(&id).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
@@ -60,13 +61,13 @@ pub async fn get_user(
     path = "/api/v1/users",
     tag = "Users",
     responses(
-        (status = 200, description = "List users", body = GenericApiResponse<Vec<UserResponseDto>>)
+        (status = 200, description = "List users", body = GenericApiResponse<Vec<UserOutput>>)
     )
 )]
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
-    State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
-) -> Result<GenericApiResponse<Vec<UserResponseDto>>, ApiError> {
+    State(service): State<Arc<UsersService>>,
+) -> Result<GenericApiResponse<Vec<UserOutput>>, ApiError> {
     let users = service.list_users().await?;
     let dtos = users.into_iter().map(Into::into).collect();
     Ok(GenericApiResponse::success(dtos))
@@ -82,7 +83,7 @@ pub async fn list_users(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn delete_user(
-    State(service): State<std::sync::Arc<crate::application::users::UsersService>>,
+    State(service): State<Arc<UsersService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<()>, ApiError> {
     service.delete_user(&id).await?;

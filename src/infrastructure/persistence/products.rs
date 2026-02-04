@@ -95,8 +95,7 @@ impl ProductsRepository {
 
     #[tracing::instrument(skip_all)]
     pub async fn find_by_id(&self, id: &str) -> Result<Option<Product>> {
-        let oid = ObjectId::parse_str(id)
-            .map_err(|_| Error::invalid_param("id", "Product", id))?;
+        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
 
         Ok(self.collection.find_one(doc! { "_id": oid }).await?)
     }
@@ -109,13 +108,8 @@ impl ProductsRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn update_metadata(
-        &self,
-        id: &str,
-        metadata: &ProductMetadata,
-    ) -> Result<bool> {
-        let oid = ObjectId::parse_str(id)
-            .map_err(|_| Error::invalid_param("id", "Product", id))?;
+    pub async fn update_metadata(&self, id: &str, metadata: &ProductMetadata) -> Result<bool> {
+        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
 
         let metadata_bson = bson::serialize_to_bson(metadata)
             .map_err(|e| Error::internal(format!("Serialization error: {}", e)))?;
@@ -135,5 +129,13 @@ impl ProductsRepository {
             .await?;
 
         Ok(result.matched_count > 0)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn delete(&self, id: &str) -> Result<bool> {
+        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
+
+        let result = self.collection.delete_one(doc! { "_id": oid }).await?;
+        Ok(result.deleted_count > 0)
     }
 }

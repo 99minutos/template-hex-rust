@@ -99,4 +99,18 @@ impl OrdersRepository {
             .as_object_id()
             .ok_or_else(|| Error::internal("Failed to get inserted ID"))
     }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn find_by_id(&self, id: &str) -> Result<Option<Order>> {
+        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Order", id))?;
+
+        Ok(self.collection.find_one(doc! { "_id": oid }).await?)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn find_all(&self) -> Result<Vec<Order>> {
+        use futures::stream::TryStreamExt;
+        let cursor = self.collection.find(doc! {}).await?;
+        Ok(cursor.try_collect().await?)
+    }
 }

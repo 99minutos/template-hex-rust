@@ -9,11 +9,6 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
-pub struct MessageResponseDto {
-    pub message: String,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
 pub struct GenericApiResponse<T> {
     #[schema(example = "0af7651916cd43dd8448eb211c80319c")]
     pub trace_id: String,

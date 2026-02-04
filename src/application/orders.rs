@@ -4,7 +4,7 @@ use crate::{
     infrastructure::persistence::{
         orders::OrdersRepository, products::ProductsRepository, users::UsersRepository,
     },
-    presentation::http::orders::dtos::CreateOrderDto,
+    presentation::http::orders::dtos::CreateOrderInput,
 };
 use mongodb::bson::oid::ObjectId;
 use std::sync::Arc;
@@ -30,7 +30,7 @@ impl OrdersService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn create_order(&self, dto: CreateOrderDto) -> Result<Order> {
+    pub async fn create_order(&self, dto: CreateOrderInput) -> Result<Order> {
         // 1. Validate User
         if self.users_repo.find_by_id(&dto.user_id).await?.is_none() {
             return Err(Error::not_found("User", &dto.user_id));
@@ -43,9 +43,12 @@ impl OrdersService {
             .await?
             .ok_or_else(|| Error::not_found("Product", &dto.product_id))?;
 
-        // 3. Business Logic
-        if dto.quantity <= 0 {
-            return Err(Error::invalid_range("quantity", 1, i32::MAX));
+        // 3. Business Logic: Check stock
+        if product.stock < dto.quantity {
+            return Err(Error::business_rule(format!(
+                "Insufficient stock: requested {}, available {}",
+                dto.quantity, product.stock
+            )));
         }
 
         let total_price = product.price * (dto.quantity as f64);
@@ -70,5 +73,18 @@ impl OrdersService {
         let id = self.orders_repo.create(&order).await?;
         order.id = Some(id);
         Ok(order)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn get_order(&self, id: &str) -> Result<Order> {
+        self.orders_repo
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| Error::not_found("Order", id))
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn list_orders(&self) -> Result<Vec<Order>> {
+        Ok(self.orders_repo.find_all().await?)
     }
 }

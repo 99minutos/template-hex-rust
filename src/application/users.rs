@@ -1,7 +1,7 @@
 use crate::domain::error::{Error, Result};
 use crate::{
     domain::users::User, infrastructure::persistence::users::UsersRepository,
-    presentation::http::users::dtos::CreateUserDto,
+    presentation::http::users::dtos::CreateUserInput,
 };
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn create_user(&self, dto: CreateUserDto) -> Result<User> {
+    pub async fn create_user(&self, dto: CreateUserInput) -> Result<User> {
         if self.repo.find_by_email(&dto.email).await?.is_some() {
             return Err(Error::duplicate("User", "email", &dto.email));
         }

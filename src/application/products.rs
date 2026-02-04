@@ -2,7 +2,7 @@ use crate::domain::error::{Error, Result};
 use crate::domain::products::{Product, ProductMetadata, ProductStatus};
 use crate::{
     infrastructure::persistence::products::ProductsRepository,
-    presentation::http::products::dtos::CreateProductDto,
+    presentation::http::products::dtos::CreateProductInput,
 };
 use chrono::Utc;
 use std::sync::Arc;
@@ -18,7 +18,7 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn create_product(&self, dto: CreateProductDto) -> Result<Product> {
+    pub async fn create_product(&self, dto: CreateProductInput) -> Result<Product> {
         let now = Utc::now();
         let mut product = Product {
             id: None,
@@ -41,26 +41,33 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn list_products(&self) -> Result<Vec<Product>> {
-        Ok(self.repo.find_all().await?)
-    }
-
-    // Internal helper for other services if needed,
-    // though usually they go through repository or public service methods
-    #[tracing::instrument(skip_all)]
-    pub async fn update_metadata(&self, id: &str, metadata: ProductMetadata) -> Result<()> {
-        let updated = self.repo.update_metadata(id, &metadata).await?;
-        if !updated {
-            return Err(Error::not_found("Product", id));
-        }
-        Ok(())
-    }
-
-    #[tracing::instrument(skip_all)]
     pub async fn get_product(&self, id: &str) -> Result<Product> {
         self.repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| Error::not_found("Product", id))
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn list_products(&self) -> Result<Vec<Product>> {
+        Ok(self.repo.find_all().await?)
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn update_metadata(&self, id: &str, metadata: ProductMetadata) -> Result<Product> {
+        let updated = self.repo.update_metadata(id, &metadata).await?;
+        if !updated {
+            return Err(Error::not_found("Product", id));
+        }
+        self.get_product(id).await
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn delete_product(&self, id: &str) -> Result<()> {
+        let deleted = self.repo.delete(id).await?;
+        if !deleted {
+            return Err(Error::not_found("Product", id));
+        }
+        Ok(())
     }
 }

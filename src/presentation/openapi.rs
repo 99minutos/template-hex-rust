@@ -7,7 +7,7 @@ use utoipa::OpenApi;
     info(
         title = "Rust Microservice Template API",
         version = "0.1.0",
-        description = "Vertical Slice Architecture Demo.\n\nFlow:\n1. Create User -> Get ID\n2. Create Product -> Get ID\n3. Create Order (requires UserID + ProductID)"
+        description = "Clean Architecture Template.\n\nFlow:\n1. Create User -> Get ID\n2. Create Product -> Get ID\n3. Create Order (requires UserID + ProductID)"
     ),
     paths(
         // Users
@@ -17,39 +17,39 @@ use utoipa::OpenApi;
         users::routes::delete_user,
         // Products
         products::routes::create_product,
+        products::routes::get_product,
         products::routes::list_products,
-        products::routes::update_product_metadata,
+        products::routes::update_metadata,
+        products::routes::delete_product,
         // Orders
         orders::routes::create_order,
+        orders::routes::get_order,
+        orders::routes::list_orders,
     ),
     components(
         schemas(
             // Users
-            users::dtos::CreateUserDto,
-            users::dtos::UserResponseDto,
+            users::dtos::CreateUserInput,
+            users::dtos::UserOutput,
             // Products
-            products::dtos::CreateProductDto,
-            products::dtos::UpdateProductMetadataDto,
-            products::dtos::ProductResponseDto,
+            products::dtos::CreateProductInput,
+            products::dtos::UpdateProductMetadataInput,
+            products::dtos::ProductOutput,
             crate::domain::products::ProductStatus,
             crate::domain::products::ProductMetadata,
-            crate::presentation::http::response::MessageResponseDto,
             // Orders
-            orders::dtos::CreateOrderDto,
-            orders::dtos::OrderResponseDto,
-            // Generics
-            GenericApiResponse<users::dtos::UserResponseDto>,
-            GenericApiResponse<Vec<users::dtos::UserResponseDto>>,
-            GenericApiResponse<products::dtos::ProductResponseDto>,
-            GenericApiResponse<Vec<products::dtos::ProductResponseDto>>,
-            GenericApiResponse<crate::presentation::http::response::MessageResponseDto>,
-            GenericApiResponse<orders::dtos::OrderResponseDto>,
+            orders::dtos::CreateOrderInput,
+            orders::dtos::OrderOutput,
+            // Response Wrapper
+            GenericApiResponse<users::dtos::UserOutput>,
+            GenericApiResponse<products::dtos::ProductOutput>,
+            GenericApiResponse<orders::dtos::OrderOutput>
         )
     ),
     tags(
         (name = "Users", description = "User management"),
         (name = "Products", description = "Product management"),
-        (name = "Orders", description = "Order processing (Depends on User + Product)")
+        (name = "Orders", description = "Order processing")
     )
 )]
 pub struct ApiDoc;

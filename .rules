@@ -37,7 +37,9 @@ src/
 │
 ├── infrastructure/          # 🟢 External I/O (Implements Domain contracts)
 │   ├── persistence/
-│   │   ├── {entity}.rs      # Repositories: CRUD + indexes + Result<T>
+│   │   ├── {entity}/
+│   │   │   ├── repository.rs    # Repositories: CRUD + indexes + Result<T>
+│   │   │   └── mod.rs
 │   │   └── mod.rs
 │   ├── providers/           # Redis, HTTP clients, external APIs
 │   │   ├── mongo.rs         # MongoProvider (connection)
@@ -49,6 +51,10 @@ src/
 ├── presentation/            # 🟡 API Layer (HTTP/gRPC protocols)
 │   ├── http/
 │   │   ├── {entity}/
+│   │   │   │   ├── dtos/
+│   │   │   │   ├── input.rs     # Input DTOs: Create/Update structs
+│   │   │   │   ├── output.rs    # Output DTOs: Response structs
+│   │   │   │   └── mod.rs
 │   │   │   ├── routes.rs    # Handlers: extract, call service, map response
 │   │   │   ├── dtos.rs      # *Input/*Output DTOs with validation
 │   │   │   └── mod.rs

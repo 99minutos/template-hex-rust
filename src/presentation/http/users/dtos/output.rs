@@ -1,18 +1,9 @@
 use crate::domain::users::User;
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use utoipa::ToSchema;
-use validator::Validate;
-
-#[derive(Deserialize, ToSchema, Validate)]
-pub struct CreateUserDto {
-    #[validate(length(min = 1, message = "Name cannot be empty"))]
-    pub name: String,
-    #[validate(email(message = "Invalid email format"))]
-    pub email: String,
-}
 
 #[derive(Serialize, ToSchema)]
-pub struct UserResponseDto {
+pub struct UserOutput {
     pub id: String,
     pub name: String,
     pub email: String,
@@ -20,10 +11,10 @@ pub struct UserResponseDto {
     pub updated_at: String,
 }
 
-impl From<User> for UserResponseDto {
+impl From<User> for UserOutput {
     fn from(user: User) -> Self {
         Self {
-            id: user.id.unwrap().to_hex(),
+            id: user.id.expect("User must have ID").to_hex(),
             name: user.name,
             email: user.email,
             created_at: user.created_at.to_rfc3339(),
