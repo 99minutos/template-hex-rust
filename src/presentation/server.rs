@@ -40,7 +40,7 @@ impl ServerLauncher {
             let state = self.state.clone();
 
             let cors = if env.cors_origins == "*" {
-                CorsLayer::new().allow_origin(Any)
+                CorsLayer::permissive()
             } else {
                 let origins: Vec<_> = env
                     .cors_origins
