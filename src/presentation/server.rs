@@ -41,13 +41,19 @@ impl ServerLauncher {
 
             let cors = if env.cors_origins == "*" {
                 CorsLayer::permissive()
+                    .allow_methods(Any)
+                    .allow_headers(Any)
             } else {
                 let origins: Vec<_> = env
                     .cors_origins
                     .split(',')
                     .map(|s| s.parse().expect("Invalid CORS origin"))
                     .collect();
-                CorsLayer::new().allow_origin(origins)
+
+                CorsLayer::new()
+                    .allow_methods(Any)
+                    .allow_headers(Any)
+                    .allow_origin(origins)
             };
 
             let mut router_builder = Router::new().nest("/api/v1", http::app_router());
