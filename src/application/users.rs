@@ -17,7 +17,6 @@ impl UsersService {
 
     #[tracing::instrument(skip_all)]
     pub async fn create_user(&self, dto: CreateUserDto) -> Result<User> {
-        // Business Logic: Validate Uniqueness
         if self.repo.find_by_email(&dto.email).await?.is_some() {
             return Err(Error::duplicate("User", "email", &dto.email));
         }
