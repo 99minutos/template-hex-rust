@@ -1,7 +1,7 @@
-use crate::domain::products::Product;
+use crate::domain::products::{Product, ProductMetadata};
 use mongodb::{
     Collection, Database,
-    bson::{doc, oid::ObjectId},
+    bson::{DateTime, doc, oid::ObjectId},
 };
 
 #[derive(Clone)]
@@ -36,5 +36,35 @@ impl ProductsRepository {
         use futures::stream::TryStreamExt;
         let cursor = self.collection.find(doc! {}).await?;
         cursor.try_collect().await
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn update_metadata(
+        &self,
+        id: &str,
+        metadata: &ProductMetadata,
+    ) -> mongodb::error::Result<bool> {
+        let oid = match ObjectId::parse_str(id) {
+            Ok(oid) => oid,
+            Err(_) => return Ok(false),
+        };
+
+        let metadata_bson = bson::serialize_to_bson(metadata).unwrap();
+        let now = DateTime::from_chrono(chrono::Utc::now());
+
+        let result = self
+            .collection
+            .update_one(
+                doc! { "_id": oid },
+                doc! {
+                    "$set": {
+                        "metadata":  metadata_bson,
+                        "updated_at": now,
+                    }
+                },
+            )
+            .await?;
+
+        Ok(result.matched_count > 0)
     }
 }

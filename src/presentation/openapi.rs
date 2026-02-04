@@ -18,6 +18,7 @@ use utoipa::OpenApi;
         // Products
         products::routes::create_product,
         products::routes::list_products,
+        products::routes::update_product_metadata,
         // Orders
         orders::routes::create_order,
     ),
@@ -28,7 +29,11 @@ use utoipa::OpenApi;
             users::dtos::UserResponseDto,
             // Products
             products::dtos::CreateProductDto,
+            products::dtos::UpdateProductMetadataDto,
             products::dtos::ProductResponseDto,
+            crate::domain::products::ProductStatus,
+            crate::domain::products::ProductMetadata,
+            crate::presentation::http::response::MessageResponseDto,
             // Orders
             orders::dtos::CreateOrderDto,
             orders::dtos::OrderResponseDto,
@@ -37,6 +42,7 @@ use utoipa::OpenApi;
             GenericApiResponse<Vec<users::dtos::UserResponseDto>>,
             GenericApiResponse<products::dtos::ProductResponseDto>,
             GenericApiResponse<Vec<products::dtos::ProductResponseDto>>,
+            GenericApiResponse<crate::presentation::http::response::MessageResponseDto>,
             GenericApiResponse<orders::dtos::OrderResponseDto>,
         )
     ),
