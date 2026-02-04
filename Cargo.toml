@@ -3,6 +3,9 @@ name = "service"
 version = "0.1.0"
 edition = "2024"
 
+[build]
+rustc-wrapper = "sccache"
+
 [profile.release]
 lto = true
 opt-level = 3

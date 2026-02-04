@@ -2,6 +2,14 @@
 
 This is a template for building Rust microservices using a layered architecture. It uses `axum` for the web server and `mongodb` for the database.
 
+## Prerequisites
+
+Install the following:
+
+```bash
+cargo install sccache
+```
+
 ## Architecture
 
 The project is organized into layers to separate concerns:
