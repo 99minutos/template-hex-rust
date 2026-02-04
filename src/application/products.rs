@@ -1,4 +1,4 @@
-use crate::domain::error::Error;
+use crate::domain::error::{Error, Result};
 use crate::domain::products::{Product, ProductMetadata, ProductStatus};
 use crate::{
     infrastructure::persistence::products::ProductsRepository,
@@ -18,7 +18,7 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn create_product(&self, dto: CreateProductDto) -> Result<Product, Error> {
+    pub async fn create_product(&self, dto: CreateProductDto) -> Result<Product> {
         let now = Utc::now();
         let mut product = Product {
             id: None,
@@ -41,26 +41,26 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn list_products(&self) -> Result<Vec<Product>, Error> {
+    pub async fn list_products(&self) -> Result<Vec<Product>> {
         Ok(self.repo.find_all().await?)
     }
 
     // Internal helper for other services if needed,
     // though usually they go through repository or public service methods
     #[tracing::instrument(skip_all)]
-    pub async fn update_metadata(&self, id: &str, metadata: ProductMetadata) -> Result<(), Error> {
+    pub async fn update_metadata(&self, id: &str, metadata: ProductMetadata) -> Result<()> {
         let updated = self.repo.update_metadata(id, &metadata).await?;
         if !updated {
-            return Err(Error::NotFound(format!("Product {} not found", id)));
+            return Err(Error::not_found("Product", id));
         }
         Ok(())
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn get_product(&self, id: &str) -> Result<Product, Error> {
+    pub async fn get_product(&self, id: &str) -> Result<Product> {
         self.repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| Error::NotFound(format!("Product {} not found", id)))
+            .ok_or_else(|| Error::not_found("Product", id))
     }
 }

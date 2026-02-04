@@ -1,4 +1,4 @@
-use crate::domain::error::Error;
+use crate::domain::error::{Error, Result};
 use crate::{
     domain::orders::Order,
     infrastructure::persistence::{
@@ -30,12 +30,10 @@ impl OrdersService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn create_order(&self, dto: CreateOrderDto) -> Result<Order, Error> {
+    pub async fn create_order(&self, dto: CreateOrderDto) -> Result<Order> {
         // 1. Validate User
-        // Note: We access repository directly.
-        // In some architectures, you might inject UsersService here instead.
         if self.users_repo.find_by_id(&dto.user_id).await?.is_none() {
-            return Err(Error::NotFound(format!("User {} not found", dto.user_id)));
+            return Err(Error::not_found("User", &dto.user_id));
         }
 
         // 2. Validate Product & Get Price
@@ -43,18 +41,26 @@ impl OrdersService {
             .products_repo
             .find_by_id(&dto.product_id)
             .await?
-            .ok_or_else(|| Error::NotFound(format!("Product {} not found", dto.product_id)))?;
+            .ok_or_else(|| Error::not_found("Product", &dto.product_id))?;
 
-        // 3. Logic
+        // 3. Business Logic
+        if dto.quantity <= 0 {
+            return Err(Error::invalid_range("quantity", 1, i32::MAX));
+        }
+
         let total_price = product.price * (dto.quantity as f64);
         let user_id = ObjectId::parse_str(&dto.user_id)
-            .map_err(|_| Error::InvalidId("Invalid User ID".to_string()))?;
+            .map_err(|_| Error::invalid_param("user_id", "User", &dto.user_id))?;
+
+        let product_id = product
+            .id
+            .ok_or_else(|| Error::internal("Product missing ID"))?;
 
         // 4. Persistence
         let mut order = Order {
             id: None,
             user_id,
-            product_id: product.id.unwrap(),
+            product_id,
             quantity: dto.quantity,
             total_price,
             created_at: chrono::Utc::now(),

@@ -21,6 +21,12 @@ pub enum ApiError {
     #[error("Unauthorized access: {0}")]
     Unauthorized(String),
 
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
+    #[error("Business logic error: {0}")]
+    UnprocessableEntity(String),
+
     #[error("Internal server error")]
     Internal(String),
 }
@@ -28,17 +34,31 @@ pub enum ApiError {
 impl From<DomainError> for ApiError {
     fn from(err: DomainError) -> Self {
         match err {
-            DomainError::ValidationError(msg) => ApiError::BadRequest(msg),
-            DomainError::InvalidId(msg) => ApiError::BadRequest(msg),
-            DomainError::NotFound(msg) => ApiError::NotFound(msg),
-            DomainError::Conflict(msg) => ApiError::Conflict(msg),
+            DomainError::Invalid { field, reason } => {
+                ApiError::BadRequest(format!("Invalid {}: {}", field, reason))
+            }
+            DomainError::Required { field } => {
+                ApiError::BadRequest(format!("{} is required", field))
+            }
+            DomainError::NotFound { entity, id } => {
+                ApiError::NotFound(format!("{} not found: {}", entity, id))
+            }
+            DomainError::AlreadyExists { entity, details } => {
+                ApiError::Conflict(format!("{} already exists: {}", entity, details))
+            }
             DomainError::Unauthorized(msg) => ApiError::Unauthorized(msg),
-            DomainError::DatabaseError(e) => {
+            DomainError::Forbidden(msg) => ApiError::Forbidden(msg),
+            DomainError::BusinessRule(msg) => ApiError::UnprocessableEntity(msg),
+            DomainError::ExternalService { service, message } => {
+                tracing::error!("External service error [{}]: {}", service, message);
+                ApiError::Internal(format!("External service error: {}", service))
+            }
+            DomainError::Database(e) => {
                 tracing::error!("Database error: {:?}", e);
                 ApiError::Internal("Database error occurred".to_string())
             }
-            DomainError::InternalError(msg) => {
-                tracing::error!("Internal error: {:?}", msg);
+            DomainError::Internal(msg) => {
+                tracing::error!("Internal error: {}", msg);
                 ApiError::Internal("Internal server error".to_string())
             }
         }
@@ -52,6 +72,8 @@ impl IntoResponse for ApiError {
             ApiError::NotFound(msg) => (StatusCode::NOT_FOUND, msg),
             ApiError::Conflict(msg) => (StatusCode::CONFLICT, msg),
             ApiError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, msg),
+            ApiError::Forbidden(msg) => (StatusCode::FORBIDDEN, msg),
+            ApiError::UnprocessableEntity(msg) => (StatusCode::UNPROCESSABLE_ENTITY, msg),
             ApiError::Internal(msg) => (StatusCode::INTERNAL_SERVER_ERROR, msg),
         };
 
