@@ -31,7 +31,7 @@ async fn main() {
     tracing::info!("Starting {} (env: {})", env.service_name, env.app_env);
 
     // Initialize infrastructure
-    let mongo = MongoProvider::new().await;
+    let mongo = MongoProvider::new(&env.service_name, &env.mongo_url, &env.mongo_db).await;
     let db = mongo.get_database();
 
     // 1. Initialize Repositories
