@@ -1,4 +1,5 @@
 use crate::application::users::UsersService;
+use crate::infrastructure::persistence::Pagination;
 use crate::presentation::{
     http::{
         error::ApiError,
@@ -10,10 +11,22 @@ use crate::presentation::{
 };
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{get, post},
 };
+use serde::Deserialize;
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
+pub struct UserQuery {
+    #[validate(range(min = 1))]
+    pub page: Option<u32>,
+
+    #[validate(range(min = 1, max = 100))]
+    pub page_size: Option<u32>,
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -35,7 +48,7 @@ pub async fn create_user(
     State(service): State<Arc<UsersService>>,
     ValidatedJson(req): ValidatedJson<CreateUserInput>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.create_user(req).await?;
+    let user = service.create_user(req.into()).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
 
@@ -60,6 +73,7 @@ pub async fn get_user(
     get,
     path = "/api/v1/users",
     tag = "Users",
+    params(UserQuery),
     responses(
         (status = 200, description = "List users", body = GenericApiResponse<Vec<UserOutput>>)
     )
@@ -67,8 +81,14 @@ pub async fn get_user(
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(service): State<Arc<UsersService>>,
+    Query(query): Query<UserQuery>,
 ) -> Result<GenericApiResponse<Vec<UserOutput>>, ApiError> {
-    let users = service.list_users().await?;
+    let pagination = Pagination {
+        page: query.page.unwrap_or(1),
+        page_size: query.page_size.unwrap_or(20),
+    };
+
+    let users = service.list_users(pagination).await?;
     let dtos = users.into_iter().map(Into::into).collect();
     Ok(GenericApiResponse::success(dtos))
 }

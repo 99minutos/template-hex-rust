@@ -15,9 +15,9 @@ pub struct OrderOutput {
 impl From<Order> for OrderOutput {
     fn from(order: Order) -> Self {
         Self {
-            id: order.id.expect("Order must have ID").to_hex(),
-            user_id: order.user_id.to_hex(),
-            product_id: order.product_id.to_hex(),
+            id: order.id.unwrap_or_default(),
+            user_id: order.user_id,
+            product_id: order.product_id,
             quantity: order.quantity,
             total_price: order.total_price,
             created_at: order.created_at.to_rfc3339(),

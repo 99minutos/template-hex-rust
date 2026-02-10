@@ -1,3 +1,4 @@
+use crate::application::orders::CreateOrder;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use validator::Validate;
@@ -12,4 +13,14 @@ pub struct CreateOrderInput {
 
     #[validate(range(min = 1, message = "Quantity must be at least 1"))]
     pub quantity: i32,
+}
+
+impl From<CreateOrderInput> for CreateOrder {
+    fn from(dto: CreateOrderInput) -> Self {
+        Self {
+            user_id: dto.user_id,
+            product_id: dto.product_id,
+            quantity: dto.quantity,
+        }
+    }
 }

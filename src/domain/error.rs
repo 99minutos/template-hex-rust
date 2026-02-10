@@ -30,7 +30,7 @@ pub enum DomainError {
     ExternalService { service: String, message: String },
 
     #[error("Database error: {0}")]
-    Database(#[from] mongodb::error::Error),
+    Database(String),
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -142,6 +142,10 @@ impl DomainError {
 
     pub fn internal(message: impl Into<String>) -> Self {
         Self::Internal(message.into())
+    }
+
+    pub fn database(message: impl Into<String>) -> Self {
+        Self::Database(message.into())
     }
 
     // ===== Servicios externos =====

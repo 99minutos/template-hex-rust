@@ -1,4 +1,5 @@
 use crate::application::products::ProductsService;
+use crate::infrastructure::persistence::Pagination;
 use crate::presentation::{
     http::{
         error::ApiError,
@@ -10,10 +11,22 @@ use crate::presentation::{
 };
 use axum::{
     Router,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     routing::{get, patch, post},
 };
+use serde::Deserialize;
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
+use validator::Validate;
+
+#[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
+pub struct ProductQuery {
+    #[validate(range(min = 1))]
+    pub page: Option<u32>,
+
+    #[validate(range(min = 1, max = 100))]
+    pub page_size: Option<u32>,
+}
 
 pub fn router() -> Router<AppState> {
     Router::new()
@@ -36,7 +49,7 @@ pub async fn create_product(
     State(service): State<Arc<ProductsService>>,
     ValidatedJson(req): ValidatedJson<CreateProductInput>,
 ) -> Result<GenericApiResponse<ProductOutput>, ApiError> {
-    let product = service.create_product(req).await?;
+    let product = service.create_product(req.into()).await?;
     Ok(GenericApiResponse::success(product.into()))
 }
 
@@ -61,6 +74,7 @@ pub async fn get_product(
     get,
     path = "/api/v1/products",
     tag = "Products",
+    params(ProductQuery),
     responses(
         (status = 200, description = "List products", body = GenericApiResponse<Vec<ProductOutput>>)
     )
@@ -68,8 +82,14 @@ pub async fn get_product(
 #[tracing::instrument(skip_all)]
 pub async fn list_products(
     State(service): State<Arc<ProductsService>>,
+    Query(query): Query<ProductQuery>,
 ) -> Result<GenericApiResponse<Vec<ProductOutput>>, ApiError> {
-    let products = service.list_products().await?;
+    let pagination = Pagination {
+        page: query.page.unwrap_or(1),
+        page_size: query.page_size.unwrap_or(20),
+    };
+
+    let products = service.list_products(pagination).await?;
     let dtos = products.into_iter().map(Into::into).collect();
     Ok(GenericApiResponse::success(dtos))
 }

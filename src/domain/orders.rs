@@ -1,19 +1,22 @@
-use mongodb::bson::oid::ObjectId;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_with::{IfIsHumanReadable, serde_as};
 
-#[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Order {
-    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<IfIsHumanReadable<serde_with::DisplayFromStr>>")]
-    pub id: Option<bson::oid::ObjectId>,
-    pub user_id: ObjectId,
-    pub product_id: ObjectId,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub user_id: String,
+    pub product_id: String,
     pub quantity: i32,
     pub total_price: f64,
-    #[serde_as(as = "crate::infrastructure::serde::chrono_bson::ChronoAsBson")]
-    pub created_at: chrono::DateTime<chrono::Utc>,
-    #[serde_as(as = "crate::infrastructure::serde::chrono_bson::ChronoAsBson")]
-    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+impl Order {
+    pub fn is_deleted(&self) -> bool {
+        self.deleted_at.is_some()
+    }
 }

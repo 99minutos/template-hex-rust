@@ -1,6 +1,6 @@
 # Rust Layered Architecture Agent
-# Version: 5.0 | DDD/Hexagonal | Error-Driven Design
-# Updated: 2026-02 | Production-Ready Template
+# Version: 6.0 | DDD/Hexagonal | Strict Dependency Isolation
+# Updated: 2025-07 | Production-Ready Template
 
 Expert Rust engineer specializing in clean architecture. Prioritize: type safety, explicit error handling,
 domain isolation, and modular design. Follow DDD principles strictly.
@@ -8,77 +8,99 @@ domain isolation, and modular design. Follow DDD principles strictly.
 ## 🎯 MODULAR MODE
 This agent can work on specific layers independently:
 - `--domain-only`: Work only on domain entities and errors
-- `--repository-only`: Work only on infrastructure/persistence
-- `--service-only`: Work only on application services
+- `--repository-only`: Work only on infrastructure/persistence (models + repos)
+- `--service-only`: Work only on application services and commands
 - `--api-only`: Work only on presentation/HTTP layer
 - `--full-stack`: Work across all layers (default)
 
 ## 1. Tech Stack
 
 **Core**: Rust 2024 | Axum 0.8 | Tokio 1.x (async runtime)
-**Data**: MongoDB 3.x + Indexes | Redis (optional)
-**Errors**: thiserror (typed errors) | anyhow (context)
+**Data**: MongoDB 3.x (bson 3.x) + Indexes | Redis (optional)
+**Errors**: thiserror (typed errors) | anyhow (context in providers)
 **Validation**: validator (DTOs) + business rules (services)
 **Docs**: utoipa (OpenAPI auto-generation)
-**Observability**: tracing + OpenTelemetry
+**Observability**: tracing + tracing-opentelemetry + Stackdriver
 
 ## 2. Architecture (Strict Layered / Hexagonal)
 
 ```
 src/
-├── domain/                  # ⚪ Core Business (Zero external deps)
-│   ├── {entity}.rs          # Entities: pub fields, serde, ObjectId
+├── domain/                  # ⚪ Core Business (ZERO external deps)
+│   ├── {entity}.rs          # Entities: pub fields, serde, String IDs, chrono dates
 │   ├── error.rs             # DomainError enum + Result<T> alias + helpers
 │   └── mod.rs
 │
 ├── application/             # 🔵 Business Logic (Uses Domain + Repos)
-│   ├── {entity}.rs          # Services: orchestration, business rules
+│   ├── {entity}.rs          # Services + Command structs (own input types)
 │   └── mod.rs
 │
-├── infrastructure/          # 🟢 External I/O (Implements Domain contracts)
+├── infrastructure/          # 🟢 External I/O (Persistence Models + Repos)
 │   ├── persistence/
 │   │   ├── {entity}/
-│   │   │   ├── repository.rs    # Repositories: CRUD + indexes + Result<T>
+│   │   │   ├── model.rs         # {Entity}Document: BSON-aware, ObjectId, ChronoAsBson
+│   │   │   ├── repository.rs    # Repository: Collection<Document>, returns Domain entities
 │   │   │   └── mod.rs
-│   │   └── mod.rs
+│   │   └── mod.rs               # Pagination struct + module re-exports
 │   ├── providers/           # Redis, HTTP clients, external APIs
 │   │   ├── mongo.rs         # MongoProvider (connection)
 │   │   ├── redis.rs
 │   │   └── telemetry.rs
 │   ├── serde/               # Custom serialization helpers
+│   │   └── chrono_bson.rs   # ChronoAsBson (used ONLY by Documents)
 │   └── mod.rs
 │
-├── presentation/            # 🟡 API Layer (HTTP/gRPC protocols)
+├── presentation/            # 🟡 API Layer (HTTP protocols)
 │   ├── http/
 │   │   ├── {entity}/
-│   │   │   │   ├── dtos/
-│   │   │   │   ├── input.rs     # Input DTOs: Create/Update structs
-│   │   │   │   ├── output.rs    # Output DTOs: Response structs
+│   │   │   ├── dtos/
+│   │   │   │   ├── input.rs     # Input DTOs + From<DTO> → Application Command
+│   │   │   │   ├── output.rs    # Output DTOs + From<DomainEntity> → Output
 │   │   │   │   └── mod.rs
-│   │   │   ├── routes.rs    # Handlers: extract, call service, map response
-│   │   │   ├── dtos.rs      # *Input/*Output DTOs with validation
+│   │   │   ├── routes.rs    # Handlers: extract, convert DTO→Cmd, call service, map response
 │   │   │   └── mod.rs
 │   │   ├── error.rs         # ApiError (maps DomainError → HTTP status)
-│   │   ├── response.rs      # GenericApiResponse<T>
+│   │   ├── response.rs      # GenericApiResponse<T> with trace_id
 │   │   ├── validation.rs    # ValidatedJson extractor
 │   │   └── mod.rs
 │   ├── server.rs            # Axum app + graceful shutdown
-│   ├── state.rs             # AppState (Arc services)
+│   ├── state.rs             # AppState (Arc services) + FromRef impls
 │   └── openapi.rs           # utoipa registry
 │
-├── config.rs                # Environment loading (dotenvy)
+├── config.rs                # Environment loading (dotenvy + OnceLock)
 └── main.rs                  # DI wiring: Repo → Service → State → Server
 ```
 
-### Dependency Rules (CRITICAL)
+### Dependency Rules (CRITICAL — ENFORCED)
 ```
-Domain ← Application ← Infrastructure
-   ↑         ↑              ↑
-   └─────────┴──────────────┴─── Presentation
+┌────────────────┐   From<DTO> → Cmd
+│  Presentation   │───────────────────┐
+└───────┬────────┘                    ▼
+        │ uses                  ┌──────────────┐
+        │                       │  Application  │ ← owns Command structs
+        │                       └──────┬───────┘
+        │                              │ uses
+        ▼                              ▼
+┌────────────────┐  From/TryFrom  ┌──────────┐
+│ Infrastructure  │◄─────────────►│  Domain   │
+│  (Documents)   │                │  (pure)   │
+└────────────────┘                └──────────┘
+    ↓
+  MongoDB
 
-✅ Allowed: Outer depends on inner
-❌ Forbidden: Inner depends on outer
-❌ Forbidden: Domain imports mongodb, axum, etc.
+✅ Allowed: Outer layers depend on inner layers
+✅ Allowed: Infrastructure converts between Documents ↔ Domain entities
+❌ FORBIDDEN: Domain imports bson, mongodb, axum, or any infra crate
+❌ FORBIDDEN: Application imports anything from Presentation
+❌ FORBIDDEN: Domain imports anything from Infrastructure
+```
+
+### Verification Commands
+```bash
+# These greps MUST return zero results:
+grep -r "use crate::infrastructure" src/domain/     # Domain → Infra
+grep -r "use crate::presentation" src/application/  # App → Presentation
+grep -r "bson::\|mongodb::" src/domain/             # Domain → DB crates
 ```
 
 ## 3. Error Handling System (MANDATORY)
@@ -114,8 +136,11 @@ pub enum DomainError {
     #[error("External service error: {service} - {message}")]
     ExternalService { service: String, message: String },
 
+    // NOTE: Database(String) — NOT #[from] mongodb::error::Error
+    // Domain must never depend on infrastructure types.
+    // Repositories convert: .map_err(|e| Error::database(e.to_string()))
     #[error("Database error: {0}")]
-    Database(#[from] mongodb::error::Error),
+    Database(String),
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -163,6 +188,10 @@ impl DomainError {
         Self::Internal(message.into())
     }
 
+    pub fn database(message: impl Into<String>) -> Self {
+        Self::Database(message.into())
+    }
+
     pub fn unauthorized(reason: impl Into<String>) -> Self {
         Self::Unauthorized(reason.into())
     }
@@ -178,6 +207,34 @@ impl DomainError {
     pub fn external(service: impl Into<String>, message: impl Into<String>) -> Self {
         Self::ExternalService { service: service.into(), message: message.into() }
     }
+
+    pub fn external_timeout(service: impl Into<String>) -> Self {
+        Self::ExternalService { service: service.into(), message: "Request timeout".into() }
+    }
+
+    pub fn missing_token() -> Self {
+        Self::Unauthorized("Authentication token required".into())
+    }
+
+    pub fn invalid_token() -> Self {
+        Self::Unauthorized("Invalid or expired token".into())
+    }
+
+    pub fn insufficient_permissions(action: impl Into<String>) -> Self {
+        Self::Forbidden(format!("Insufficient permissions to {}", action.into()))
+    }
+
+    pub fn operation_not_allowed(operation: impl Into<String>, reason: impl Into<String>) -> Self {
+        Self::BusinessRule(format!("{}: {}", operation.into(), reason.into()))
+    }
+
+    pub fn parse_error(field: &'static str, value: impl Into<String>) -> Self {
+        Self::Invalid { field, reason: format!("Cannot parse value: {}", value.into()) }
+    }
+
+    pub fn conversion_error(from: &str, to: &str) -> Self {
+        Self::Internal(format!("Failed to convert from {} to {}", from, to))
+    }
 }
 
 // Convenience aliases (ALWAYS include)
@@ -188,28 +245,34 @@ pub type Result<T> = std::result::Result<T, DomainError>;
 ### 3.2 Error Usage Patterns
 
 ```rust
-// In repositories: Convert MongoDB errors to Domain errors
+// In repositories: Convert MongoDB errors to Domain errors via .map_err()
 pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
     let oid = ObjectId::parse_str(id)
         .map_err(|_| Error::invalid_param("id", "User", id))?;
-    Ok(self.collection.find_one(doc! { "_id": oid }).await?)
+
+    let doc = self.collection
+        .find_one(doc! { "_id": oid, "deleted_at": { "$exists": false } })
+        .await
+        .map_err(|e| Error::database(e.to_string()))?;   // ← explicit conversion
+
+    Ok(doc.map(User::from))
 }
 
-// In services: Use descriptive helpers
-pub async fn create_user(&self, input: CreateUserInput) -> Result<User> {
-    if self.repo.find_by_email(&input.email).await?.is_some() {
-        return Err(Error::duplicate("User", "email", &input.email));
+// In services: Use Application Commands (NOT presentation DTOs)
+pub async fn create_user(&self, cmd: CreateUser) -> Result<User> {
+    if self.repo.find_by_email(&cmd.email).await?.is_some() {
+        return Err(Error::duplicate("User", "email", &cmd.email));
     }
     // ... create logic
 }
 
-// In handlers: Errors auto-convert to HTTP responses
+// In handlers: Convert DTO → Command, then call service
 pub async fn create_user(
     State(service): State<Arc<UsersService>>,
     ValidatedJson(input): ValidatedJson<CreateUserInput>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.create_user(input).await?; // DomainError → ApiError
-    Ok(GenericApiResponse::success(user.into()))
+    let user = service.create_user(input.into()).await?;  // DTO.into() → Command
+    Ok(GenericApiResponse::success(user.into()))           // Domain.into() → Output
 }
 ```
 
@@ -217,41 +280,35 @@ pub async fn create_user(
 
 ### Rules
 - ✅ Pure structs, no I/O, no async
-- ✅ Public fields with serde derives
-- ✅ Option<ObjectId> for id field
-- ✅ chrono types for dates
-- ✅ Business calculations (methods without side effects)
-- ❌ NO database, HTTP, or external deps
+- ✅ Public fields with `serde::{Serialize, Deserialize}` derives
+- ✅ `Option<String>` for id fields (NOT ObjectId)
+- ✅ `chrono::DateTime<Utc>` for dates (NOT bson::DateTime)
+- ✅ `Option<DateTime<Utc>>` for `deleted_at` on ALL entities
+- ✅ Business calculation methods (pure, no side effects)
+- ❌ NO `bson`, `mongodb`, `serde_with`, or infra crate imports
+- ❌ NO `crate::infrastructure::*` imports
 - ❌ NO validation (done in DTOs/Services)
 
 ### Template
 ```rust
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use serde_with::{serde_as, IfIsHumanReadable};
 
-#[serde_as]
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
-    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<IfIsHumanReadable<serde_with::DisplayFromStr>>")]
-    pub id: Option<bson::oid::ObjectId>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,               // String, NOT ObjectId
 
     pub email: String,
     pub name: String,
+    pub created_at: DateTime<Utc>,         // chrono native, NOT bson::DateTime
+    pub updated_at: DateTime<Utc>,
 
-    #[serde_as(as = "crate::infrastructure::serde::chrono_bson::ChronoAsBson")]
-    pub created_at: chrono::DateTime<chrono::Utc>,
-
-    #[serde_as(as = "crate::infrastructure::serde::chrono_bson::ChronoAsBson")]
-    pub updated_at: chrono::DateTime<chrono::Utc>,
-
-    // Soft delete
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[serde_as(as = "Option<crate::infrastructure::serde::chrono_bson::ChronoAsBson>")]
-    pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
+    pub deleted_at: Option<DateTime<Utc>>, // Soft delete (MANDATORY)
 }
 
-// Business logic methods (pure functions)
+// Business logic methods (pure functions, no I/O)
 impl User {
     pub fn is_deleted(&self) -> bool {
         self.deleted_at.is_some()
@@ -263,20 +320,35 @@ impl User {
 }
 ```
 
-## 5. Infrastructure Layer - Repositories (--repository-only)
+## 5. Infrastructure Layer - Persistence Models & Repositories (--repository-only)
+
+### Key Concept: Persistence Models (Documents)
+
+Each domain entity has a corresponding `{Entity}Document` in infrastructure that:
+- Uses `bson::oid::ObjectId` for IDs
+- Uses `ChronoAsBson` for date serialization
+- Implements `From<Entity> → Document` and `From<Document> → Entity`
+- Is the type used by `Collection<T>` — domain entities never touch MongoDB directly
+
+```
+Domain Entity ←→ Persistence Document ←→ MongoDB
+  (pure Rust)      (BSON-aware)          (database)
+```
 
 ### Rules
-- ✅ Return `Result<T>` (Domain Result type)
-- ✅ Simple CRUD operations
+- ✅ Return `Result<T>` (Domain Result type) with domain entities
+- ✅ Use `Collection<{Entity}Document>` internally
+- ✅ Convert mongo errors: `.map_err(|e| Error::database(e.to_string()))`
 - ✅ Define indexes in `create_indexes()` method
 - ✅ All index names end with `_idx`
 - ✅ Convert ObjectId parse errors with `invalid_param()`
 - ✅ Support pagination with `Pagination` struct
-- ✅ Soft deletes: set `deleted_at`, filter by default
-- ❌ NO business logic (only data operations)
-- ❌ NO direct error exposure (wrap mongodb errors)
+- ✅ Soft deletes: `delete()` → `$set deleted_at`, all queries filter `deleted_at: {$exists: false}`
+- ✅ `create()` returns `Result<String>` (hex ID, not ObjectId)
+- ❌ NO business logic in repositories
+- ❌ NO `?` on mongodb errors (use explicit `.map_err()`)
 
-### Pagination Standard
+### Pagination Standard (in `persistence/mod.rs`)
 ```rust
 #[derive(Debug, Clone)]
 pub struct Pagination {
@@ -286,7 +358,7 @@ pub struct Pagination {
 
 impl Pagination {
     pub fn skip(&self) -> u64 {
-        ((self.page - 1) * self.page_size) as u64
+        ((self.page.saturating_sub(1)) * self.page_size) as u64
     }
 
     pub fn limit(&self) -> i64 {
@@ -301,20 +373,80 @@ impl Default for Pagination {
 }
 ```
 
-### Repository Template
+### Document Model Template (`persistence/{entity}/model.rs`)
+```rust
+use crate::domain::users::User;
+use crate::infrastructure::serde::chrono_bson::ChronoAsBson;
+use bson::oid::ObjectId;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use serde_with::{IfIsHumanReadable, serde_as};
+
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserDocument {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<IfIsHumanReadable<serde_with::DisplayFromStr>>")]
+    pub id: Option<ObjectId>,
+    pub name: String,
+    pub email: String,
+    #[serde_as(as = "ChronoAsBson")]
+    pub created_at: DateTime<Utc>,
+    #[serde_as(as = "ChronoAsBson")]
+    pub updated_at: DateTime<Utc>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<ChronoAsBson>")]
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+
+// Domain → Document
+impl From<User> for UserDocument {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id.and_then(|id| ObjectId::parse_str(&id).ok()),
+            name: user.name,
+            email: user.email,
+            created_at: user.created_at,
+            updated_at: user.updated_at,
+            deleted_at: user.deleted_at,
+        }
+    }
+}
+
+// Document → Domain
+impl From<UserDocument> for User {
+    fn from(doc: UserDocument) -> Self {
+        Self {
+            id: doc.id.map(|oid| oid.to_hex()),
+            name: doc.name,
+            email: doc.email,
+            created_at: doc.created_at,
+            updated_at: doc.updated_at,
+            deleted_at: doc.deleted_at,
+        }
+    }
+}
+```
+
+**NOTE**: When Document has foreign key ObjectIds (e.g. `OrderDocument.user_id: ObjectId`),
+use `TryFrom<Entity> for Document` instead of `From`, since parsing can fail.
+
+### Repository Template (`persistence/{entity}/repository.rs`)
 ```rust
 use crate::domain::error::{Error, Result};
 use crate::domain::users::User;
+use crate::infrastructure::persistence::Pagination;
+use crate::infrastructure::persistence::users::model::UserDocument;
+use futures::stream::TryStreamExt;
 use mongodb::{
     Collection, Database, IndexModel,
     bson::{doc, oid::ObjectId},
     options::IndexOptions,
 };
-use futures::stream::TryStreamExt;
 
 #[derive(Clone)]
 pub struct UsersRepository {
-    collection: Collection<User>,
+    collection: Collection<UserDocument>,  // ← Document type, NOT domain entity
 }
 
 impl UsersRepository {
@@ -322,10 +454,8 @@ impl UsersRepository {
         Self { collection: db.collection("users") }
     }
 
-    /// Create database indexes (call once on startup)
     pub async fn create_indexes(&self) -> Result<()> {
         let indexes = vec![
-            // Unique email
             IndexModel::builder()
                 .keys(doc! { "email": 1 })
                 .options(IndexOptions::builder()
@@ -333,8 +463,6 @@ impl UsersRepository {
                     .name("email_unique_idx".to_string())
                     .build())
                 .build(),
-
-            // Soft delete filter + created date
             IndexModel::builder()
                 .keys(doc! { "deleted_at": 1, "created_at": -1 })
                 .options(IndexOptions::builder()
@@ -343,108 +471,172 @@ impl UsersRepository {
                 .build(),
         ];
 
-        self.collection.create_indexes(indexes).await?;
+        self.collection.create_indexes(indexes).await
+            .map_err(|e| Error::database(e.to_string()))?;
+
         tracing::info!("✓ Users indexes created");
         Ok(())
     }
 
-    // CREATE
-    pub async fn create(&self, user: &User) -> Result<ObjectId> {
-        let result = self.collection.insert_one(user).await?;
+    // CREATE — returns String ID
+    #[tracing::instrument(skip_all)]
+    pub async fn create(&self, user: &User) -> Result<String> {
+        let doc = UserDocument::from(user.clone());
+        let result = self.collection.insert_one(doc).await
+            .map_err(|e| Error::database(e.to_string()))?;
+
         result.inserted_id.as_object_id()
+            .map(|oid| oid.to_hex())
             .ok_or_else(|| Error::internal("Failed to get inserted ID"))
     }
 
-    // READ (by ID)
+    // READ — returns domain entity, filters soft-deleted
+    #[tracing::instrument(skip_all)]
     pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
         let oid = ObjectId::parse_str(id)
             .map_err(|_| Error::invalid_param("id", "User", id))?;
 
-        // Filter soft-deleted by default
-        Ok(self.collection
+        let doc = self.collection
             .find_one(doc! { "_id": oid, "deleted_at": { "$exists": false } })
-            .await?)
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
+
+        Ok(doc.map(User::from))
     }
 
-    // READ (with pagination)
+    // READ — paginated list
+    #[tracing::instrument(skip_all)]
     pub async fn find_all(&self, pagination: Pagination) -> Result<Vec<User>> {
         let cursor = self.collection
             .find(doc! { "deleted_at": { "$exists": false } })
             .skip(pagination.skip())
             .limit(pagination.limit())
             .sort(doc! { "created_at": -1 })
-            .await?;
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
 
-        Ok(cursor.try_collect().await?)
+        let docs: Vec<UserDocument> = cursor.try_collect().await
+            .map_err(|e| Error::database(e.to_string()))?;
+
+        Ok(docs.into_iter().map(User::from).collect())
     }
 
-    // READ (by unique field)
+    // READ — by unique field
+    #[tracing::instrument(skip_all)]
     pub async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
-        Ok(self.collection
-            .find_one(doc! {
-                "email": email,
-                "deleted_at": { "$exists": false }
-            })
-            .await?)
+        let doc = self.collection
+            .find_one(doc! { "email": email, "deleted_at": { "$exists": false } })
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
+
+        Ok(doc.map(User::from))
     }
 
     // UPDATE
+    #[tracing::instrument(skip_all)]
     pub async fn update(&self, id: &str, user: &User) -> Result<bool> {
         let oid = ObjectId::parse_str(id)
             .map_err(|_| Error::invalid_param("id", "User", id))?;
 
+        let doc = UserDocument::from(user.clone());
+        let bson_doc = bson::serialize_to_document(&doc)
+            .map_err(|e| Error::internal(e.to_string()))?;
+
         let result = self.collection
             .update_one(
                 doc! { "_id": oid, "deleted_at": { "$exists": false } },
-                doc! { "$set": bson::to_document(user)? },
+                doc! { "$set": bson_doc },
             )
-            .await?;
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
 
         Ok(result.matched_count > 0)
     }
 
-    // DELETE (soft)
+    // SOFT DELETE
+    #[tracing::instrument(skip_all)]
     pub async fn delete(&self, id: &str) -> Result<bool> {
         let oid = ObjectId::parse_str(id)
             .map_err(|_| Error::invalid_param("id", "User", id))?;
 
+        let now = bson::DateTime::from_chrono(chrono::Utc::now());
+
         let result = self.collection
             .update_one(
                 doc! { "_id": oid, "deleted_at": { "$exists": false } },
-                doc! { "$set": { "deleted_at": chrono::Utc::now() } },
+                doc! { "$set": { "deleted_at": now } },
             )
-            .await?;
+            .await
+            .map_err(|e| Error::database(e.to_string()))?;
 
         Ok(result.matched_count > 0)
     }
 
-    // COUNT (for pagination metadata)
+    // COUNT
+    #[tracing::instrument(skip_all)]
     pub async fn count(&self) -> Result<u64> {
-        Ok(self.collection
+        self.collection
             .count_documents(doc! { "deleted_at": { "$exists": false } })
-            .await?)
+            .await
+            .map_err(|e| Error::database(e.to_string()))
     }
 }
 ```
 
-## 6. Application Layer - Services (--service-only)
+### Module Re-exports (`persistence/{entity}/mod.rs`)
+```rust
+pub mod model;
+pub mod repository;
+
+pub use repository::UsersRepository;
+```
+
+## 6. Application Layer - Services & Commands (--service-only)
+
+### Key Concept: Application Commands
+
+Services define their own input types (Command structs). They NEVER import DTOs from
+the Presentation layer. The conversion `DTO → Command` happens in Presentation via `From`.
+
+```
+Presentation DTO → From<DTO> → Application Command → Service → Domain Entity
+```
 
 ### Rules
 - ✅ Import `Result<T>` from domain
+- ✅ Define Command structs (`CreateUser`, `UpdateUser`) in same file
 - ✅ Orchestrate multiple repositories
 - ✅ Can call other services (composition)
-- ✅ Business validations (existence checks, rules)
-- ✅ Handle transactions if needed
-- ❌ NO direct database access
+- ✅ Business validations (existence checks, rules, stock checks)
+- ✅ Use `#[tracing::instrument(skip_all, fields(...))]` with relevant fields
+- ✅ Handle side effects (stock decrement, etc.) atomically when possible
+- ❌ NO direct database access (use repositories)
 - ❌ NO HTTP/presentation concerns
+- ❌ NO imports from `crate::presentation::*`
 
 ### Template
 ```rust
 use crate::domain::error::{Error, Result};
 use crate::domain::users::User;
+use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::UsersRepository;
-use crate::presentation::http::users::dtos::{CreateUserInput, UpdateUserInput};
 use std::sync::Arc;
+
+// ===== Application Commands =====
+
+#[derive(Debug, Clone)]
+pub struct CreateUser {
+    pub name: String,
+    pub email: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct UpdateUser {
+    pub name: String,
+    pub email: String,
+}
+
+// ===== Service =====
 
 #[derive(Clone)]
 pub struct UsersService {
@@ -456,182 +648,181 @@ impl UsersService {
         Self { repo }
     }
 
-    #[tracing::instrument(skip(self))]
-    pub async fn create_user(&self, input: CreateUserInput) -> Result<User> {
-        // Business validation: Check uniqueness
-        if self.repo.find_by_email(&input.email).await?.is_some() {
-            return Err(Error::duplicate("User", "email", &input.email));
+    #[tracing::instrument(skip_all, fields(email = %cmd.email))]
+    pub async fn create_user(&self, cmd: CreateUser) -> Result<User> {
+        if self.repo.find_by_email(&cmd.email).await?.is_some() {
+            return Err(Error::duplicate("User", "email", &cmd.email));
         }
 
+        let now = chrono::Utc::now();
         let mut user = User {
             id: None,
-            email: input.email,
-            name: input.name,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            name: cmd.name,
+            email: cmd.email,
+            created_at: now,
+            updated_at: now,
             deleted_at: None,
         };
 
         let id = self.repo.create(&user).await?;
         user.id = Some(id);
 
-        tracing::info!(user_id = %id, "User created successfully");
+        tracing::info!(user_id = %user.id.as_deref().unwrap_or("unknown"), "User created");
         Ok(user)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(%id))]
     pub async fn get_user(&self, id: &str) -> Result<User> {
         self.repo.find_by_id(id).await?
             .ok_or_else(|| Error::not_found("User", id))
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all)]
     pub async fn list_users(&self, pagination: Pagination) -> Result<Vec<User>> {
         self.repo.find_all(pagination).await
     }
 
-    #[tracing::instrument(skip(self))]
-    pub async fn update_user(&self, id: &str, input: UpdateUserInput) -> Result<User> {
+    #[tracing::instrument(skip_all, fields(%id))]
+    pub async fn update_user(&self, id: &str, cmd: UpdateUser) -> Result<User> {
         let mut user = self.get_user(id).await?;
 
-        // Business rule: Cannot change email to existing one
-        if input.email != user.email {
-            if self.repo.find_by_email(&input.email).await?.is_some() {
-                return Err(Error::duplicate("User", "email", &input.email));
+        // Business rule: Cannot change email to one already in use
+        if cmd.email != user.email {
+            if self.repo.find_by_email(&cmd.email).await?.is_some() {
+                return Err(Error::duplicate("User", "email", &cmd.email));
             }
         }
 
-        user.email = input.email;
-        user.name = input.name;
+        user.name = cmd.name;
+        user.email = cmd.email;
         user.updated_at = chrono::Utc::now();
 
         self.repo.update(id, &user).await?;
+        tracing::info!("User updated");
         Ok(user)
     }
 
-    #[tracing::instrument(skip(self))]
+    #[tracing::instrument(skip_all, fields(%id))]
     pub async fn delete_user(&self, id: &str) -> Result<()> {
         let deleted = self.repo.delete(id).await?;
         if !deleted {
             return Err(Error::not_found("User", id));
         }
-        tracing::info!("User soft-deleted successfully");
+        tracing::info!("User soft-deleted");
         Ok(())
     }
 }
 ```
 
-### Service Composition (When to use other services)
+### Service Composition (Cross-entity business rules)
 ```rust
-// Example: OrdersService needs to validate User and Product exist
 pub struct OrdersService {
     orders_repo: Arc<OrdersRepository>,
-    users_service: Arc<UsersService>,    // ✅ Use service for business operations
-    products_repo: Arc<ProductsRepository>, // ✅ Or repo for simple data access
+    users_repo: Arc<UsersRepository>,
+    products_repo: Arc<ProductsRepository>,
 }
 
 impl OrdersService {
-    pub async fn create_order(&self, input: CreateOrderInput) -> Result<Order> {
-        // Option 1: Use service (if validation logic is complex)
-        let user = self.users_service.get_user(&input.user_id).await?;
-
-        // Option 2: Use repo directly (if just checking existence)
-        let product = self.products_repo.find_by_id(&input.product_id).await?
-            .ok_or_else(|| Error::not_found("Product", &input.product_id))?;
-
-        // Business rule: Check product stock
-        if product.stock < input.quantity {
-            return Err(Error::business_rule("Insufficient product stock"));
+    pub async fn create_order(&self, cmd: CreateOrder) -> Result<Order> {
+        // 1. Validate user exists
+        if self.users_repo.find_by_id(&cmd.user_id).await?.is_none() {
+            return Err(Error::not_found("User", &cmd.user_id));
         }
 
-        // ... create order
+        // 2. Validate product exists and check stock
+        let product = self.products_repo.find_by_id(&cmd.product_id).await?
+            .ok_or_else(|| Error::not_found("Product", &cmd.product_id))?;
+
+        if product.stock < cmd.quantity {
+            return Err(Error::business_rule(format!(
+                "Insufficient stock: requested {}, available {}",
+                cmd.quantity, product.stock
+            )));
+        }
+
+        // 3. Decrement stock atomically
+        self.products_repo.update_stock(&cmd.product_id, -cmd.quantity).await?;
+
+        // 4. Persist order
+        // ...
     }
 }
 ```
 
 ## 7. Presentation Layer - HTTP (--api-only)
 
-### 7.1 DTOs (`dtos.rs`)
+### Key Concept: DTO ↔ Command ↔ Domain Conversions
+
+```
+Request JSON → CreateUserInput (validated) → From → CreateUser (command) → Service
+                                                                            ↓
+Response JSON ← UserOutput ← From ← User (domain entity) ←────────────────┘
+```
+
+### 7.1 DTOs (`dtos/input.rs` and `dtos/output.rs`)
 
 #### Naming Convention (STRICT)
 ```rust
-// Input DTOs (requests)
+// Input DTOs (requests) — in dtos/input.rs
 CreateUserInput    // POST /users
 UpdateUserInput    // PUT /users/:id
-UserQuery         // GET /users (query params)
 
-// Output DTOs (responses)
+// Output DTOs (responses) — in dtos/output.rs
 UserOutput        // Single entity response
-UserListOutput    // Collection response (optional if Vec<UserOutput> is clear)
+
+// Query params — in routes.rs (local to handler)
+UserQuery         // GET /users (pagination params)
 ```
 
-#### Template
+#### Input Template (with Command conversion)
 ```rust
-use crate::domain::users::User;
-use serde::{Deserialize, Serialize};
+use crate::application::users::CreateUser;
+use serde::Deserialize;
 use utoipa::ToSchema;
 use validator::Validate;
 
-// INPUT: Create
 #[derive(Deserialize, ToSchema, Validate)]
 pub struct CreateUserInput {
+    #[validate(length(min = 1, message = "Name cannot be empty"))]
+    pub name: String,
+
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
-
-    #[validate(length(min = 1, max = 100, message = "Name must be 1-100 characters"))]
-    pub name: String,
 }
 
-// INPUT: Update
-#[derive(Deserialize, ToSchema, Validate)]
-pub struct UpdateUserInput {
-    #[validate(email)]
-    pub email: String,
-
-    #[validate(length(min = 1, max = 100))]
-    pub name: String,
+// DTO → Application Command (MANDATORY for every input DTO)
+impl From<CreateUserInput> for CreateUser {
+    fn from(dto: CreateUserInput) -> Self {
+        Self {
+            name: dto.name,
+            email: dto.email,
+        }
+    }
 }
+```
 
-// INPUT: Query params
-#[derive(Deserialize, ToSchema, Validate)]
-pub struct UserQuery {
-    #[validate(range(min = 1, max = 100))]
-    pub page: Option<u32>,
+#### Output Template
+```rust
+use crate::domain::users::User;
+use serde::Serialize;
+use utoipa::ToSchema;
 
-    #[validate(range(min = 1, max = 100))]
-    pub page_size: Option<u32>,
-}
-
-// OUTPUT: Single entity
 #[derive(Serialize, ToSchema)]
 pub struct UserOutput {
     pub id: String,
-    pub email: String,
     pub name: String,
+    pub email: String,
     pub created_at: String,
     pub updated_at: String,
 }
 
-// Conversion: Domain → Output (PREFER From/Into)
+// Domain → Output DTO
 impl From<User> for UserOutput {
     fn from(user: User) -> Self {
         Self {
-            id: user.id.expect("User must have ID").to_hex(),
-            email: user.email,
+            id: user.id.unwrap_or_default(),       // Already a String
             name: user.name,
-            created_at: user.created_at.to_rfc3339(),
-            updated_at: user.updated_at.to_rfc3339(),
-        }
-    }
-}
-
-// Alternative: Explicit method (when From is ambiguous)
-impl UserOutput {
-    pub fn from_domain(user: User) -> Self {
-        Self {
-            id: user.id.expect("User must have ID").to_hex(),
             email: user.email,
-            name: user.name,
             created_at: user.created_at.to_rfc3339(),
             updated_at: user.updated_at.to_rfc3339(),
         }
@@ -643,24 +834,40 @@ impl UserOutput {
 
 ```rust
 use crate::application::users::UsersService;
-use crate::presentation::http::{
-    error::ApiError,
-    response::GenericApiResponse,
-    validation::ValidatedJson,
-    users::dtos::*,
-};
 use crate::infrastructure::persistence::Pagination;
+use crate::presentation::{
+    http::{
+        error::ApiError,
+        response::GenericApiResponse,
+        users::dtos::{CreateUserInput, UserOutput},
+        validation::ValidatedJson,
+    },
+    state::AppState,
+};
 use axum::{
     Router,
     extract::{Path, Query, State},
-    routing::{get, post, put, delete},
+    routing::{get, post},
 };
+use serde::Deserialize;
 use std::sync::Arc;
+use utoipa::{IntoParams, ToSchema};
+use validator::Validate;
 
-pub fn router() -> Router<crate::presentation::state::AppState> {
+// Query params (local to routes, not in dtos/)
+#[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
+pub struct UserQuery {
+    #[validate(range(min = 1))]
+    pub page: Option<u32>,
+
+    #[validate(range(min = 1, max = 100))]
+    pub page_size: Option<u32>,
+}
+
+pub fn router() -> Router<AppState> {
     Router::new()
         .route("/", post(create_user).get(list_users))
-        .route("/:id", get(get_user).put(update_user).delete(delete_user))
+        .route("/{id}", get(get_user).delete(delete_user))
 }
 
 #[utoipa::path(
@@ -672,30 +879,13 @@ pub fn router() -> Router<crate::presentation::state::AppState> {
         (status = 200, description = "User created", body = GenericApiResponse<UserOutput>)
     )
 )]
-#[tracing::instrument(skip(service))]
+#[tracing::instrument(skip_all)]
 pub async fn create_user(
     State(service): State<Arc<UsersService>>,
     ValidatedJson(input): ValidatedJson<CreateUserInput>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.create_user(input).await?;
-    Ok(GenericApiResponse::success(user.into()))
-}
-
-#[utoipa::path(
-    get,
-    path = "/api/v1/users/{id}",
-    tag = "Users",
-    responses(
-        (status = 200, description = "User found", body = GenericApiResponse<UserOutput>)
-    )
-)]
-#[tracing::instrument(skip(service))]
-pub async fn get_user(
-    State(service): State<Arc<UsersService>>,
-    Path(id): Path<String>,
-) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.get_user(&id).await?;
-    Ok(GenericApiResponse::success(user.into()))
+    let user = service.create_user(input.into()).await?;  // DTO → Command via .into()
+    Ok(GenericApiResponse::success(user.into()))           // Domain → Output via .into()
 }
 
 #[utoipa::path(
@@ -707,7 +897,7 @@ pub async fn get_user(
         (status = 200, description = "User list", body = GenericApiResponse<Vec<UserOutput>>)
     )
 )]
-#[tracing::instrument(skip(service))]
+#[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(service): State<Arc<UsersService>>,
     Query(query): Query<UserQuery>,
@@ -720,42 +910,6 @@ pub async fn list_users(
     let users = service.list_users(pagination).await?;
     let outputs = users.into_iter().map(Into::into).collect();
     Ok(GenericApiResponse::success(outputs))
-}
-
-#[utoipa::path(
-    put,
-    path = "/api/v1/users/{id}",
-    tag = "Users",
-    request_body = UpdateUserInput,
-    responses(
-        (status = 200, description = "User updated", body = GenericApiResponse<UserOutput>)
-    )
-)]
-#[tracing::instrument(skip(service))]
-pub async fn update_user(
-    State(service): State<Arc<UsersService>>,
-    Path(id): Path<String>,
-    ValidatedJson(input): ValidatedJson<UpdateUserInput>,
-) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.update_user(&id, input).await?;
-    Ok(GenericApiResponse::success(user.into()))
-}
-
-#[utoipa::path(
-    delete,
-    path = "/api/v1/users/{id}",
-    tag = "Users",
-    responses(
-        (status = 200, description = "User deleted")
-    )
-)]
-#[tracing::instrument(skip(service))]
-pub async fn delete_user(
-    State(service): State<Arc<UsersService>>,
-    Path(id): Path<String>,
-) -> Result<GenericApiResponse<()>, ApiError> {
-    service.delete_user(&id).await?;
-    Ok(GenericApiResponse::success(()))
 }
 ```
 
@@ -797,18 +951,14 @@ pub enum ApiError {
 impl From<DomainError> for ApiError {
     fn from(err: DomainError) -> Self {
         match err {
-            DomainError::Invalid { field, reason } => {
-                ApiError::BadRequest(format!("Invalid {}: {}", field, reason))
-            }
-            DomainError::Required { field } => {
-                ApiError::BadRequest(format!("{} is required", field))
-            }
-            DomainError::NotFound { entity, id } => {
-                ApiError::NotFound(format!("{} not found: {}", entity, id))
-            }
-            DomainError::AlreadyExists { entity, details } => {
-                ApiError::Conflict(format!("{} already exists: {}", entity, details))
-            }
+            DomainError::Invalid { field, reason } =>
+                ApiError::BadRequest(format!("Invalid {}: {}", field, reason)),
+            DomainError::Required { field } =>
+                ApiError::BadRequest(format!("{} is required", field)),
+            DomainError::NotFound { entity, id } =>
+                ApiError::NotFound(format!("{} not found: {}", entity, id)),
+            DomainError::AlreadyExists { entity, details } =>
+                ApiError::Conflict(format!("{} already exists: {}", entity, details)),
             DomainError::Unauthorized(msg) => ApiError::Unauthorized(msg),
             DomainError::Forbidden(msg) => ApiError::Forbidden(msg),
             DomainError::BusinessRule(msg) => ApiError::UnprocessableEntity(msg),
@@ -816,8 +966,8 @@ impl From<DomainError> for ApiError {
                 tracing::error!("External service error [{}]: {}", service, message);
                 ApiError::Internal(format!("External service error: {}", service))
             }
-            DomainError::Database(e) => {
-                tracing::error!("Database error: {:?}", e);
+            DomainError::Database(msg) => {
+                tracing::error!("Database error: {}", msg);
                 ApiError::Internal("Database error occurred".to_string())
             }
             DomainError::Internal(msg) => {
@@ -847,101 +997,128 @@ impl IntoResponse for ApiError {
 
 ## 8. Adding a New Feature (Full Stack Flow)
 
-### Example: Adding "Products" module
+### Example: Adding "Payments" module
 
 ```bash
 # Step 1: Domain (--domain-only)
-touch src/domain/products.rs
-# Define: struct Product { id, name, price, stock, created_at, updated_at, deleted_at }
+touch src/domain/payments.rs
+# Define: struct Payment { id: Option<String>, amount: f64, ... deleted_at }
+# Add to: src/domain/mod.rs
 
-# Step 2: Repository (--repository-only)
-touch src/infrastructure/persistence/products.rs
-# Implement: ProductsRepository with CRUD + create_indexes()
+# Step 2: Persistence Model + Repository (--repository-only)
+mkdir -p src/infrastructure/persistence/payments
+touch src/infrastructure/persistence/payments/{mod.rs,model.rs,repository.rs}
+# model.rs: PaymentDocument with ObjectId, ChronoAsBson, From/Into conversions
+# repository.rs: Collection<PaymentDocument>, CRUD + indexes + soft delete + pagination
+# mod.rs: pub mod model; pub mod repository; pub use repository::PaymentsRepository;
 # Add to: src/infrastructure/persistence/mod.rs
 
-# Step 3: Service (--service-only)
-touch src/application/products.rs
-# Implement: ProductsService with business logic
+# Step 3: Service + Commands (--service-only)
+touch src/application/payments.rs
+# Define: CreatePayment command struct
+# Implement: PaymentsService with business logic
 # Add to: src/application/mod.rs
 
 # Step 4: API (--api-only)
-mkdir src/presentation/http/products
-touch src/presentation/http/products/{mod.rs,routes.rs,dtos.rs}
-# Define: CreateProductInput, UpdateProductInput, ProductOutput
-# Implement: CRUD handlers
+mkdir -p src/presentation/http/payments/dtos
+touch src/presentation/http/payments/{mod.rs,routes.rs}
+touch src/presentation/http/payments/dtos/{mod.rs,input.rs,output.rs}
+# input.rs: CreatePaymentInput + impl From<CreatePaymentInput> for CreatePayment
+# output.rs: PaymentOutput + impl From<Payment> for PaymentOutput
+# routes.rs: handlers + PaymentQuery (pagination)
 # Add to: src/presentation/http/mod.rs
 
 # Step 5: Wire in main.rs
-# 1. Create repo: let products_repo = Arc::new(ProductsRepository::new(&db));
-# 2. Create service: let products_service = Arc::new(ProductsService::new(products_repo));
-# 3. Update AppState in state.rs: pub products_service: Arc<ProductsService>
-# 4. Create indexes: products_repo.create_indexes().await?;
-# 5. Register routes in http/mod.rs: .nest("/products", products::routes::router())
+# 1. let payments_repo = Arc::new(PaymentsRepository::new(&db));
+# 2. payments_repo.create_indexes().await?;
+# 3. let payments_service = Arc::new(PaymentsService::new(payments_repo));
+# 4. Add to AppState in state.rs + impl FromRef
+# 5. Register routes in http/mod.rs: .nest("/payments", payments::routes::router())
 
 # Step 6: OpenAPI
-# Add to openapi.rs: paths(...products::routes::*)
+# Add to openapi.rs: paths + schemas
 ```
 
 ## 9. Critical Rules (NEVER VIOLATE)
 
+### Dependency Isolation
+- ✅ VERIFY with grep: no `bson::`/`mongodb::` in `src/domain/`
+- ✅ VERIFY with grep: no `crate::presentation` in `src/application/`
+- ✅ VERIFY with grep: no `crate::infrastructure` in `src/domain/`
+- ❌ NEVER let domain depend on infrastructure or presentation
+- ❌ NEVER let application depend on presentation
+
 ### Error Handling
 - ✅ ALWAYS use `Result<T>` from domain
 - ✅ ALWAYS use error helpers: `Error::not_found("User", id)`
-- ✅ ALWAYS convert ObjectId parse errors: `.map_err(|_| Error::invalid_param(...))`
-- ❌ NEVER use `.unwrap()` or `.expect()` in production paths
-- ❌ NEVER expose MongoDB errors to API layer
+- ✅ ALWAYS convert ObjectId errors: `.map_err(|_| Error::invalid_param(...))`
+- ✅ ALWAYS convert mongo errors: `.map_err(|e| Error::database(e.to_string()))`
+- ❌ NEVER use `.unwrap()` or `.expect()` in production code paths
+- ❌ NEVER use `#[from] mongodb::error::Error` in domain
+- ❌ NEVER expose raw database errors to API responses
 
-### DTOs
-- ✅ ALWAYS name with `*Input` for requests, `*Output` for responses
+### Data Flow
+- ✅ ALWAYS: Presentation DTO → `From` → Application Command → Service
+- ✅ ALWAYS: Service returns Domain Entity → `From` → Presentation Output
+- ✅ ALWAYS: Repository uses Document internally, returns Domain Entity externally
+- ❌ NEVER expose domain entities directly in API responses
+- ❌ NEVER pass presentation DTOs into services
+
+### DTOs & Commands
+- ✅ ALWAYS name DTOs: `*Input` for requests, `*Output` for responses
+- ✅ ALWAYS name Commands: `Create*`, `Update*` (in application layer)
+- ✅ ALWAYS implement `From<DTO> for Command` in dtos/input.rs
 - ✅ ALWAYS validate Input DTOs with `validator` derive
 - ✅ ALWAYS use `ValidatedJson` extractor in handlers
-- ✅ ALWAYS convert Domain → Output (never return raw entities)
-- ❌ NEVER expose domain entities in API responses
 
-### Repositories
+### Persistence
+- ✅ ALWAYS use `Collection<{Entity}Document>` (never `Collection<DomainEntity>`)
 - ✅ ALWAYS implement `create_indexes()` method
 - ✅ ALWAYS name indexes with `_idx` suffix
-- ✅ ALWAYS support soft deletes (filter `deleted_at: {$exists: false}`)
-- ✅ ALWAYS return `Result<T>` from domain
+- ✅ ALWAYS support soft deletes (`deleted_at` field + query filter)
+- ✅ ALWAYS support pagination in `find_all()` methods
+- ✅ ALWAYS return `String` IDs from `create()`, not `ObjectId`
 - ❌ NEVER put business logic in repositories
 
 ### Services
 - ✅ ALWAYS validate business rules before persistence
-- ✅ ALWAYS use tracing::instrument
-- ✅ CAN call other services (composition)
-- ✅ CAN call multiple repositories
+- ✅ ALWAYS use `#[tracing::instrument(skip_all, fields(...))]`
+- ✅ CAN call other services (composition) or multiple repositories
 - ❌ NEVER access database directly
+- ❌ NEVER import from `crate::presentation`
 
 ### Handlers
-- ✅ ALWAYS use utoipa::path macro
-- ✅ ALWAYS extract State<Arc<Service>>
-- ✅ ALWAYS map to Output DTOs
+- ✅ ALWAYS use `utoipa::path` macro for OpenAPI
+- ✅ ALWAYS extract `State<Arc<Service>>`
+- ✅ ALWAYS convert: `input.into()` for commands, `entity.into()` for outputs
 - ❌ NEVER put business logic in handlers
-- ❌ NEVER call repositories directly
+- ❌ NEVER call repositories directly from handlers
 
 ## 10. Performance & Best Practices
 
 ### MongoDB
 - Create indexes on: unique fields, foreign keys, query filters, sort fields
-- Use compound indexes for common queries
-- Use sparse indexes for optional fields
-- Limit projections to needed fields only
+- ALWAYS include `deleted_at` as first key in compound indexes (supports soft-delete filter)
+- Use sparse indexes for optional unique fields
+- Use `$inc` for atomic counter updates (e.g., stock decrement)
+- Use `bson::serialize_to_document()` for update operations (bson v3 API)
+- Use `bson::serialize_to_bson()` for nested field updates (bson v3 API)
 
 ### Memory
-- Use Arc for shared services (cheap clone)
-- Avoid unnecessary Box allocations
+- Use `Arc` for shared services (cheap clone)
+- Avoid unnecessary `Box` allocations
 - Use `&str` in function params when possible
 - Reserve capacity for Vecs: `Vec::with_capacity(n)`
 
 ### Async
-- Use tokio::spawn for CPU-intensive tasks
+- Use `tokio::spawn` for CPU-intensive tasks
 - Batch I/O operations when possible
 - Avoid blocking in async functions
 
 ### Logging
 - Use structured logging: `tracing::info!(user_id = %id, "Message")`
-- Log errors at error level, success at info
-- Use instrument macro for automatic span context
+- Log errors at `error` level, success at `info`
+- Use `instrument(skip_all, fields(...))` for automatic span context with relevant identifiers
 
 ---
 
@@ -949,17 +1126,30 @@ touch src/presentation/http/products/{mod.rs,routes.rs,dtos.rs}
 
 ### Import Patterns
 ```rust
-// Domain
+// Domain (pure — no external crates)
 use crate::domain::error::{Error, Result};
 use crate::domain::users::User;
 
-// Service
-use std::sync::Arc;
+// Application (domain + infra repos, NO presentation)
+use crate::domain::error::{Error, Result};
+use crate::domain::users::User;
+use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::UsersRepository;
+use std::sync::Arc;
 
-// Handler
+// Infrastructure Persistence Model
+use crate::domain::users::User;
+use crate::infrastructure::serde::chrono_bson::ChronoAsBson;
+use bson::oid::ObjectId;
+
+// Presentation Handler
+use crate::application::users::UsersService;
+use crate::infrastructure::persistence::Pagination;
 use axum::extract::{State, Path, Query};
 use crate::presentation::http::validation::ValidatedJson;
+
+// Presentation DTO Input (imports Application Command for From)
+use crate::application::users::CreateUser;
 ```
 
 ### Common Error Patterns
@@ -970,11 +1160,14 @@ Error::not_found("User", id)
 // Duplicate
 Error::duplicate("User", "email", &email)
 
-// Invalid param
+// Invalid param (bad ObjectId, etc.)
 Error::invalid_param("user_id", "User", &user_id)
 
 // Business rule
 Error::business_rule("Cannot delete user with active orders")
+
+// Database (from repository, explicit conversion)
+.map_err(|e| Error::database(e.to_string()))
 
 // Internal
 Error::internal("Unexpected state")
@@ -982,15 +1175,18 @@ Error::internal("Unexpected state")
 
 ### Conversion Patterns
 ```rust
-// ObjectId
+// ObjectId (ONLY in infrastructure layer)
 let oid = ObjectId::parse_str(id)
     .map_err(|_| Error::invalid_param("id", "User", id))?;
 
-// Optional to Result
+// Optional to Result (in services)
 user.ok_or_else(|| Error::not_found("User", id))?
 
-// Domain → Output
-user.into()  // or UserOutput::from(user)
+// DTO → Command (in handlers)
+let user = service.create_user(input.into()).await?;
+
+// Domain → Output (in handlers)
+Ok(GenericApiResponse::success(user.into()))
 ```
 
 ---
