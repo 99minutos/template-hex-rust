@@ -1,4 +1,4 @@
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
 use crate::infrastructure::serde::chrono_bson::ChronoAsBson;
 use bson::oid::ObjectId;
 use chrono::{DateTime, Utc};
@@ -25,7 +25,7 @@ pub struct UserDocument {
 impl From<User> for UserDocument {
     fn from(user: User) -> Self {
         Self {
-            id: user.id.and_then(|id| ObjectId::parse_str(&id).ok()),
+            id: user.id.and_then(|id| ObjectId::parse_str(&*id).ok()),
             name: user.name,
             email: user.email,
             created_at: user.created_at,
@@ -38,7 +38,7 @@ impl From<User> for UserDocument {
 impl From<UserDocument> for User {
     fn from(doc: UserDocument) -> Self {
         Self {
-            id: doc.id.map(|oid| oid.to_hex()),
+            id: doc.id.map(|oid| UserId::new(oid.to_hex())),
             name: doc.name,
             email: doc.email,
             created_at: doc.created_at,

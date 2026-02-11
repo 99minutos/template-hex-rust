@@ -1,4 +1,3 @@
-use crate::application::products::{CreateProduct, UpdateProductMetadata};
 use serde::Deserialize;
 use utoipa::ToSchema;
 use validator::Validate;
@@ -35,29 +34,4 @@ pub struct UpdateProductMetadataInput {
 
     #[validate(length(min = 1, message = "SKU is required"))]
     pub sku: String,
-}
-
-impl From<CreateProductInput> for CreateProduct {
-    fn from(dto: CreateProductInput) -> Self {
-        Self {
-            name: dto.name,
-            price: dto.price,
-            stock: dto.stock,
-            category: dto.category,
-            sku: dto.sku,
-            description: dto.description,
-            tags: dto.tags,
-        }
-    }
-}
-
-impl From<UpdateProductMetadataInput> for UpdateProductMetadata {
-    fn from(dto: UpdateProductMetadataInput) -> Self {
-        Self {
-            description: dto.description,
-            category: dto.category,
-            tags: dto.tags,
-            sku: dto.sku,
-        }
-    }
 }

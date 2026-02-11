@@ -1,4 +1,4 @@
-use crate::domain::products::{Product, ProductMetadata, ProductStatus};
+use crate::domain::products::{Product, ProductId, ProductMetadata, ProductStatus};
 use crate::infrastructure::serde::chrono_bson::ChronoAsBson;
 use bson::oid::ObjectId;
 use chrono::{DateTime, Utc};
@@ -28,7 +28,7 @@ pub struct ProductDocument {
 impl From<Product> for ProductDocument {
     fn from(product: Product) -> Self {
         Self {
-            id: product.id.and_then(|id| ObjectId::parse_str(&id).ok()),
+            id: product.id.and_then(|id| ObjectId::parse_str(&*id).ok()),
             name: product.name,
             price: product.price,
             stock: product.stock,
@@ -44,7 +44,7 @@ impl From<Product> for ProductDocument {
 impl From<ProductDocument> for Product {
     fn from(doc: ProductDocument) -> Self {
         Self {
-            id: doc.id.map(|oid| oid.to_hex()),
+            id: doc.id.map(|oid| ProductId::new(oid.to_hex())),
             name: doc.name,
             price: doc.price,
             stock: doc.stock,

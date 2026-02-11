@@ -1,5 +1,6 @@
 use crate::domain::error::{Error, Result};
-use crate::domain::orders::Order;
+use crate::domain::orders::{Order, OrderId};
+use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::orders::model::OrderDocument;
 use futures::stream::TryStreamExt;
@@ -70,7 +71,7 @@ impl OrdersRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, order: &Order) -> Result<String> {
+    pub async fn create(&self, order: &Order) -> Result<OrderId> {
         let doc = OrderDocument::try_from(order.clone())?;
 
         let result = self
@@ -82,15 +83,16 @@ impl OrdersRepository {
         result
             .inserted_id
             .as_object_id()
-            .map(|oid| oid.to_hex())
+            .map(|oid| OrderId::new(oid.to_hex()))
             .ok_or_else(|| Error::internal("Failed to get inserted ID"))
     }
 
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<Order>> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Order", id))?;
+    pub async fn find_by_id(&self, id: &OrderId) -> Result<Option<Order>> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Order", &**id))?;
 
         let doc = self
             .collection
@@ -123,11 +125,11 @@ impl OrdersRepository {
     #[tracing::instrument(skip_all)]
     pub async fn find_by_user_id(
         &self,
-        user_id: &str,
+        user_id: &UserId,
         pagination: Pagination,
     ) -> Result<Vec<Order>> {
-        let oid = ObjectId::parse_str(user_id)
-            .map_err(|_| Error::invalid_param("user_id", "User", user_id))?;
+        let oid = ObjectId::parse_str(&**user_id)
+            .map_err(|_| Error::invalid_param("user_id", "User", &**user_id))?;
 
         let cursor = self
             .collection
@@ -152,8 +154,9 @@ impl OrdersRepository {
     // ===== SOFT DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &str) -> Result<bool> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Order", id))?;
+    pub async fn delete(&self, id: &OrderId) -> Result<bool> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Order", &**id))?;
 
         let now = bson::DateTime::from_chrono(chrono::Utc::now());
 

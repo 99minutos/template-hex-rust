@@ -1,12 +1,20 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
+use crate::domain::products::ProductId;
+use crate::domain::users::UserId;
+use crate::domain::values;
+
+#[derive(Debug, Clone)]
+pub struct OrderMarker;
+pub type OrderId = values::DomainId<OrderMarker>;
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Order {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,
-    pub user_id: String,
-    pub product_id: String,
+    pub id: Option<OrderId>,
+    pub user_id: UserId,
+    pub product_id: ProductId,
     pub quantity: i32,
     pub total_price: f64,
     pub created_at: DateTime<Utc>,

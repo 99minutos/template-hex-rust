@@ -1,5 +1,5 @@
 use crate::domain::error::{Error, Result};
-use crate::domain::products::{Product, ProductMetadata};
+use crate::domain::products::{Product, ProductId, ProductMetadata};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::products::model::ProductDocument;
 use futures::stream::TryStreamExt;
@@ -88,7 +88,7 @@ impl ProductsRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, product: &Product) -> Result<String> {
+    pub async fn create(&self, product: &Product) -> Result<ProductId> {
         let doc = ProductDocument::from(product.clone());
         let result = self
             .collection
@@ -99,15 +99,16 @@ impl ProductsRepository {
         result
             .inserted_id
             .as_object_id()
-            .map(|oid| oid.to_hex())
+            .map(|oid| ProductId::new(oid.to_hex()))
             .ok_or_else(|| Error::internal("Failed to get inserted ID"))
     }
 
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<Product>> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
+    pub async fn find_by_id(&self, id: &ProductId) -> Result<Option<Product>> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
         let doc = self
             .collection
@@ -140,8 +141,13 @@ impl ProductsRepository {
     // ===== UPDATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn update_metadata(&self, id: &str, metadata: &ProductMetadata) -> Result<bool> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
+    pub async fn update_metadata(
+        &self,
+        id: &ProductId,
+        metadata: &ProductMetadata,
+    ) -> Result<bool> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
         let metadata_bson = bson::serialize_to_bson(metadata)
             .map_err(|e| Error::internal(format!("Serialization error: {}", e)))?;
@@ -165,8 +171,9 @@ impl ProductsRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn update_stock(&self, id: &str, quantity_delta: i32) -> Result<bool> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
+    pub async fn update_stock(&self, id: &ProductId, quantity_delta: i32) -> Result<bool> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
         let now = bson::DateTime::from_chrono(chrono::Utc::now());
 
@@ -188,8 +195,9 @@ impl ProductsRepository {
     // ===== SOFT DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &str) -> Result<bool> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "Product", id))?;
+    pub async fn delete(&self, id: &ProductId) -> Result<bool> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
         let now = bson::DateTime::from_chrono(chrono::Utc::now());
 

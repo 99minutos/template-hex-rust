@@ -17,7 +17,7 @@ pub struct ProductOutput {
 impl From<Product> for ProductOutput {
     fn from(product: Product) -> Self {
         Self {
-            id: product.id.unwrap_or_default(),
+            id: product.id.map(|id| id.into_inner()).unwrap_or_default(),
             name: product.name,
             price: product.price,
             stock: product.stock,

@@ -1,4 +1,5 @@
 use crate::application::users::UsersService;
+use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
 use crate::presentation::{
     http::{
@@ -48,7 +49,7 @@ pub async fn create_user(
     State(service): State<Arc<UsersService>>,
     ValidatedJson(req): ValidatedJson<CreateUserInput>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.create_user(req.into()).await?;
+    let user = service.create_user(&req.name, &req.email).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
 
@@ -65,7 +66,8 @@ pub async fn get_user(
     State(service): State<Arc<UsersService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.get_user(&id).await?;
+    let user_id = UserId::new(id);
+    let user = service.get_user(&user_id).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
 
@@ -106,6 +108,7 @@ pub async fn delete_user(
     State(service): State<Arc<UsersService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<()>, ApiError> {
-    service.delete_user(&id).await?;
+    let user_id = UserId::new(id);
+    service.delete_user(&user_id).await?;
     Ok(GenericApiResponse::success(()))
 }

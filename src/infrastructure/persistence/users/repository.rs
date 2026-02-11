@@ -1,5 +1,5 @@
 use crate::domain::error::{Error, Result};
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::model::UserDocument;
 use futures::stream::TryStreamExt;
@@ -63,7 +63,7 @@ impl UsersRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, user: &User) -> Result<String> {
+    pub async fn create(&self, user: &User) -> Result<UserId> {
         let doc = UserDocument::from(user.clone());
         let result = self
             .collection
@@ -74,15 +74,16 @@ impl UsersRepository {
         result
             .inserted_id
             .as_object_id()
-            .map(|oid| oid.to_hex())
+            .map(|oid| UserId::new(oid.to_hex()))
             .ok_or_else(|| Error::internal("Failed to get inserted ID"))
     }
 
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "User", id))?;
+    pub async fn find_by_id(&self, id: &UserId) -> Result<Option<User>> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
         let doc = self
             .collection
@@ -129,8 +130,9 @@ impl UsersRepository {
     // ===== UPDATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn update(&self, id: &str, user: &User) -> Result<bool> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "User", id))?;
+    pub async fn update(&self, id: &UserId, user: &User) -> Result<bool> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
         let doc = UserDocument::from(user.clone());
         let bson_doc =
@@ -151,8 +153,9 @@ impl UsersRepository {
     // ===== SOFT DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &str) -> Result<bool> {
-        let oid = ObjectId::parse_str(id).map_err(|_| Error::invalid_param("id", "User", id))?;
+    pub async fn delete(&self, id: &UserId) -> Result<bool> {
+        let oid =
+            ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
         let now = bson::DateTime::from_chrono(chrono::Utc::now());
 

@@ -1,31 +1,8 @@
 use crate::domain::error::{Error, Result};
-use crate::domain::products::{Product, ProductMetadata, ProductStatus};
+use crate::domain::products::{Product, ProductId, ProductMetadata, ProductStatus};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::products::ProductsRepository;
 use std::sync::Arc;
-
-// ===== Application Commands =====
-
-#[derive(Debug, Clone)]
-pub struct CreateProduct {
-    pub name: String,
-    pub price: f64,
-    pub stock: i32,
-    pub category: String,
-    pub sku: String,
-    pub description: Option<String>,
-    pub tags: Option<Vec<String>>,
-}
-
-#[derive(Debug, Clone)]
-pub struct UpdateProductMetadata {
-    pub description: Option<String>,
-    pub category: String,
-    pub tags: Vec<String>,
-    pub sku: String,
-}
-
-// ===== Service =====
 
 #[derive(Clone)]
 pub struct ProductsService {
@@ -37,21 +14,22 @@ impl ProductsService {
         Self { repo }
     }
 
-    #[tracing::instrument(skip_all, fields(name = %cmd.name, sku = %cmd.sku))]
-    pub async fn create_product(&self, cmd: CreateProduct) -> Result<Product> {
+    #[tracing::instrument(skip_all, fields(%name))]
+    pub async fn create_product(
+        &self,
+        name: &str,
+        price: f64,
+        stock: i32,
+        metadata: ProductMetadata,
+    ) -> Result<Product> {
         let now = chrono::Utc::now();
         let mut product = Product {
             id: None,
-            name: cmd.name,
-            price: cmd.price,
-            stock: cmd.stock,
+            name: name.to_string(),
+            price,
+            stock,
             status: ProductStatus::Draft,
-            metadata: ProductMetadata {
-                description: cmd.description,
-                category: cmd.category,
-                tags: cmd.tags.unwrap_or_default(),
-                sku: cmd.sku,
-            },
+            metadata,
             created_at: now,
             updated_at: now,
             deleted_at: None,
@@ -65,11 +43,11 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn get_product(&self, id: &str) -> Result<Product> {
+    pub async fn get_product(&self, id: &ProductId) -> Result<Product> {
         self.repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| Error::not_found("Product", id))
+            .ok_or_else(|| Error::not_found("Product", id.to_string()))
     }
 
     #[tracing::instrument(skip_all)]
@@ -78,17 +56,14 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn update_metadata(&self, id: &str, cmd: UpdateProductMetadata) -> Result<Product> {
-        let metadata = ProductMetadata {
-            description: cmd.description,
-            category: cmd.category,
-            tags: cmd.tags,
-            sku: cmd.sku,
-        };
-
+    pub async fn update_metadata(
+        &self,
+        id: &ProductId,
+        metadata: ProductMetadata,
+    ) -> Result<Product> {
         let updated = self.repo.update_metadata(id, &metadata).await?;
         if !updated {
-            return Err(Error::not_found("Product", id));
+            return Err(Error::not_found("Product", id.to_string()));
         }
 
         tracing::info!("Product metadata updated");
@@ -96,18 +71,18 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn delete_product(&self, id: &str) -> Result<()> {
+    pub async fn delete_product(&self, id: &ProductId) -> Result<()> {
         let deleted = self.repo.delete(id).await?;
         if !deleted {
-            return Err(Error::not_found("Product", id));
+            return Err(Error::not_found("Product", id.to_string()));
         }
         tracing::info!("Product soft-deleted");
         Ok(())
     }
 
-    /// Atomically decrement stock. Returns error if product not found.
+    /// Atomically decrement stock. Returns error if product not found or insufficient.
     #[tracing::instrument(skip_all, fields(%id, %quantity))]
-    pub async fn decrement_stock(&self, id: &str, quantity: i32) -> Result<()> {
+    pub async fn decrement_stock(&self, id: &ProductId, quantity: i32) -> Result<()> {
         let product = self.get_product(id).await?;
 
         if product.stock < quantity {
@@ -119,7 +94,7 @@ impl ProductsService {
 
         let updated = self.repo.update_stock(id, -quantity).await?;
         if !updated {
-            return Err(Error::not_found("Product", id));
+            return Err(Error::not_found("Product", id.to_string()));
         }
 
         tracing::info!(remaining = product.stock - quantity, "Stock decremented");

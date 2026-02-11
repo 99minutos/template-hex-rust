@@ -1,4 +1,7 @@
 use crate::application::orders::OrdersService;
+use crate::domain::orders::OrderId;
+use crate::domain::products::ProductId;
+use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
 use crate::presentation::{
     http::{
@@ -48,7 +51,11 @@ pub async fn create_order(
     State(service): State<Arc<OrdersService>>,
     ValidatedJson(req): ValidatedJson<CreateOrderInput>,
 ) -> Result<GenericApiResponse<OrderOutput>, ApiError> {
-    let order = service.create_order(req.into()).await?;
+    let user_id = UserId::new(req.user_id);
+    let product_id = ProductId::new(req.product_id);
+    let order = service
+        .create_order(&user_id, &product_id, req.quantity)
+        .await?;
     Ok(GenericApiResponse::success(order.into()))
 }
 
@@ -65,7 +72,8 @@ pub async fn get_order(
     State(service): State<Arc<OrdersService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<OrderOutput>, ApiError> {
-    let order = service.get_order(&id).await?;
+    let order_id = OrderId::new(id);
+    let order = service.get_order(&order_id).await?;
     Ok(GenericApiResponse::success(order.into()))
 }
 

@@ -1,21 +1,12 @@
 use crate::domain::error::{Error, Result};
-use crate::domain::orders::Order;
+use crate::domain::orders::{Order, OrderId};
+use crate::domain::products::ProductId;
+use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::orders::OrdersRepository;
 use crate::infrastructure::persistence::products::ProductsRepository;
 use crate::infrastructure::persistence::users::UsersRepository;
 use std::sync::Arc;
-
-// ===== Application Commands =====
-
-#[derive(Debug, Clone)]
-pub struct CreateOrder {
-    pub user_id: String,
-    pub product_id: String,
-    pub quantity: i32,
-}
-
-// ===== Service =====
 
 #[derive(Clone)]
 pub struct OrdersService {
@@ -37,41 +28,43 @@ impl OrdersService {
         }
     }
 
-    #[tracing::instrument(skip_all, fields(user_id = %cmd.user_id, product_id = %cmd.product_id))]
-    pub async fn create_order(&self, cmd: CreateOrder) -> Result<Order> {
+    #[tracing::instrument(skip_all, fields(%user_id, %product_id, %quantity))]
+    pub async fn create_order(
+        &self,
+        user_id: &UserId,
+        product_id: &ProductId,
+        quantity: i32,
+    ) -> Result<Order> {
         // 1. Validate user exists
-        if self.users_repo.find_by_id(&cmd.user_id).await?.is_none() {
-            return Err(Error::not_found("User", &cmd.user_id));
+        if self.users_repo.find_by_id(user_id).await?.is_none() {
+            return Err(Error::not_found("User", user_id.to_string()));
         }
 
         // 2. Validate product exists and get price
         let product = self
             .products_repo
-            .find_by_id(&cmd.product_id)
+            .find_by_id(product_id)
             .await?
-            .ok_or_else(|| Error::not_found("Product", &cmd.product_id))?;
+            .ok_or_else(|| Error::not_found("Product", product_id.to_string()))?;
 
         // 3. Business rule: check stock availability
-        if product.stock < cmd.quantity {
+        if product.stock < quantity {
             return Err(Error::business_rule(format!(
                 "Insufficient stock: requested {}, available {}",
-                cmd.quantity, product.stock
+                quantity, product.stock
             )));
         }
 
         // 4. Calculate total price
-        let total_price = product.price * (cmd.quantity as f64);
+        let total_price = product.price * (quantity as f64);
 
         // 5. Decrement stock atomically
-        let product_id = product
+        let pid = product
             .id
-            .as_deref()
+            .as_ref()
             .ok_or_else(|| Error::internal("Product missing ID"))?;
 
-        let stock_updated = self
-            .products_repo
-            .update_stock(product_id, -cmd.quantity)
-            .await?;
+        let stock_updated = self.products_repo.update_stock(pid, -quantity).await?;
 
         if !stock_updated {
             return Err(Error::business_rule(
@@ -83,9 +76,9 @@ impl OrdersService {
         let now = chrono::Utc::now();
         let mut order = Order {
             id: None,
-            user_id: cmd.user_id,
-            product_id: cmd.product_id,
-            quantity: cmd.quantity,
+            user_id: user_id.clone(),
+            product_id: product_id.clone(),
+            quantity,
             total_price,
             created_at: now,
             updated_at: now,
@@ -104,11 +97,11 @@ impl OrdersService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn get_order(&self, id: &str) -> Result<Order> {
+    pub async fn get_order(&self, id: &OrderId) -> Result<Order> {
         self.orders_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| Error::not_found("Order", id))
+            .ok_or_else(|| Error::not_found("Order", id.to_string()))
     }
 
     #[tracing::instrument(skip_all)]
@@ -119,12 +112,12 @@ impl OrdersService {
     #[tracing::instrument(skip_all, fields(%user_id))]
     pub async fn list_orders_by_user(
         &self,
-        user_id: &str,
+        user_id: &UserId,
         pagination: Pagination,
     ) -> Result<Vec<Order>> {
         // Validate user exists
         if self.users_repo.find_by_id(user_id).await?.is_none() {
-            return Err(Error::not_found("User", user_id));
+            return Err(Error::not_found("User", user_id.to_string()));
         }
 
         self.orders_repo.find_by_user_id(user_id, pagination).await

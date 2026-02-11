@@ -15,9 +15,9 @@ pub struct OrderOutput {
 impl From<Order> for OrderOutput {
     fn from(order: Order) -> Self {
         Self {
-            id: order.id.unwrap_or_default(),
-            user_id: order.user_id,
-            product_id: order.product_id,
+            id: order.id.map(|id| id.into_inner()).unwrap_or_default(),
+            user_id: order.user_id.into_inner(),
+            product_id: order.product_id.into_inner(),
             quantity: order.quantity,
             total_price: order.total_price,
             created_at: order.created_at.to_rfc3339(),

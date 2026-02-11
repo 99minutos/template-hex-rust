@@ -1,4 +1,3 @@
-use crate::application::users::CreateUser;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use validator::Validate;
@@ -9,13 +8,4 @@ pub struct CreateUserInput {
     pub name: String,
     #[validate(email(message = "Invalid email format"))]
     pub email: String,
-}
-
-impl From<CreateUserInput> for CreateUser {
-    fn from(dto: CreateUserInput) -> Self {
-        Self {
-            name: dto.name,
-            email: dto.email,
-        }
-    }
 }

@@ -1,5 +1,5 @@
 # Rust Layered Architecture Agent
-# Version: 6.0 | DDD/Hexagonal | Strict Dependency Isolation
+# Version: 7.0 | DDD/Hexagonal | Strict Dependency Isolation + Typed IDs
 # Updated: 2025-07 | Production-Ready Template
 
 Expert Rust engineer specializing in clean architecture. Prioritize: type safety, explicit error handling,
@@ -27,12 +27,13 @@ This agent can work on specific layers independently:
 ```
 src/
 ├── domain/                  # ⚪ Core Business (ZERO external deps)
-│   ├── {entity}.rs          # Entities: pub fields, serde, String IDs, chrono dates
+│   ├── {entity}.rs          # Entities + Marker + typed ID (DomainId<Marker>)
+│   ├── values.rs            # DomainId<T> generic type-safe ID
 │   ├── error.rs             # DomainError enum + Result<T> alias + helpers
 │   └── mod.rs
 │
 ├── application/             # 🔵 Business Logic (Uses Domain + Repos)
-│   ├── {entity}.rs          # Services + Command structs (own input types)
+│   ├── {entity}.rs          # Services (direct params, NO command structs)
 │   └── mod.rs
 │
 ├── infrastructure/          # 🟢 External I/O (Persistence Models + Repos)
@@ -54,10 +55,10 @@ src/
 │   ├── http/
 │   │   ├── {entity}/
 │   │   │   ├── dtos/
-│   │   │   │   ├── input.rs     # Input DTOs + From<DTO> → Application Command
+│   │   │   │   ├── input.rs     # Input DTOs (validation only, no From→Command)
 │   │   │   │   ├── output.rs    # Output DTOs + From<DomainEntity> → Output
 │   │   │   │   └── mod.rs
-│   │   │   ├── routes.rs    # Handlers: extract, convert DTO→Cmd, call service, map response
+│   │   │   ├── routes.rs    # Handlers: validate, build typed IDs, call service with params
 │   │   │   └── mod.rs
 │   │   ├── error.rs         # ApiError (maps DomainError → HTTP status)
 │   │   ├── response.rs      # GenericApiResponse<T> with trace_id
@@ -281,23 +282,75 @@ pub async fn create_user(
 ### Rules
 - ✅ Pure structs, no I/O, no async
 - ✅ Public fields with `serde::{Serialize, Deserialize}` derives
-- ✅ `Option<String>` for id fields (NOT ObjectId)
+- ✅ **Typed IDs**: `Option<UserId>` for PKs, `UserId`/`ProductId` for FKs (NOT plain String)
+- ✅ Each entity defines a Marker type + type alias: `type UserId = DomainId<UserMarker>`
 - ✅ `chrono::DateTime<Utc>` for dates (NOT bson::DateTime)
 - ✅ `Option<DateTime<Utc>>` for `deleted_at` on ALL entities
 - ✅ Business calculation methods (pure, no side effects)
 - ❌ NO `bson`, `mongodb`, `serde_with`, or infra crate imports
 - ❌ NO `crate::infrastructure::*` imports
 - ❌ NO validation (done in DTOs/Services)
+- ❌ NO plain `String` for ID fields — always use `DomainId<Marker>`
 
-### Template
+### DomainId<T> (`values.rs`)
+
+Type-safe generic ID. Serializes as plain string. Lives in `domain/values.rs`:
+
+```rust
+use std::marker::PhantomData;
+use std::ops::Deref;
+use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DomainId<T> {
+    id: String,
+    _marker: PhantomData<T>,
+}
+
+impl<T> DomainId<T> {
+    pub fn new(id: impl Into<String>) -> Self {
+        Self { id: id.into(), _marker: PhantomData }
+    }
+    pub fn into_inner(self) -> String { self.id }
+}
+
+// Serializes/deserializes as plain string (NOT {"id": "..."})
+impl<T> Serialize for DomainId<T> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error> where S: Serializer {
+        self.id.serialize(serializer)
+    }
+}
+impl<'de, T> Deserialize<'de> for DomainId<T> {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error> where D: Deserializer<'de> {
+        Ok(Self::new(String::deserialize(deserializer)?))
+    }
+}
+
+impl<T> Deref for DomainId<T> {
+    type Target = str;
+    fn deref(&self) -> &str { &self.id }
+}
+impl<T> AsRef<str> for DomainId<T> { fn as_ref(&self) -> &str { &self.id } }
+impl<T> std::fmt::Display for DomainId<T> { /* delegates to id */ }
+impl<T> From<String> for DomainId<T> { /* Self::new(s) */ }
+impl<T> From<&str> for DomainId<T> { /* Self::new(s) */ }
+impl<T> Default for DomainId<T> { /* Self::new(String::new()) */ }
+```
+
+### Entity Template
 ```rust
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use crate::domain::values;
+
+#[derive(Debug, Clone)]
+pub struct UserMarker;
+pub type UserId = values::DomainId<UserMarker>;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct User {
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub id: Option<String>,               // String, NOT ObjectId
+    pub id: Option<UserId>,                // Typed ID, NOT Option<String>
 
     pub email: String,
     pub name: String,
@@ -320,12 +373,28 @@ impl User {
 }
 ```
 
+### Foreign Key Typing
+
+Entities that reference other entities use their typed IDs:
+
+```rust
+use crate::domain::users::UserId;
+use crate::domain::products::ProductId;
+
+pub struct Order {
+    pub id: Option<OrderId>,
+    pub user_id: UserId,       // NOT String — type-safe FK
+    pub product_id: ProductId, // NOT String — type-safe FK
+    // ...
+}
+```
+
 ## 5. Infrastructure Layer - Persistence Models & Repositories (--repository-only)
 
 ### Key Concept: Persistence Models (Documents)
 
 Each domain entity has a corresponding `{Entity}Document` in infrastructure that:
-- Uses `bson::oid::ObjectId` for IDs
+- Uses `bson::oid::ObjectId` for IDs (converts to/from `DomainId<T>`)
 - Uses `ChronoAsBson` for date serialization
 - Implements `From<Entity> → Document` and `From<Document> → Entity`
 - Is the type used by `Collection<T>` — domain entities never touch MongoDB directly
@@ -344,7 +413,8 @@ Domain Entity ←→ Persistence Document ←→ MongoDB
 - ✅ Convert ObjectId parse errors with `invalid_param()`
 - ✅ Support pagination with `Pagination` struct
 - ✅ Soft deletes: `delete()` → `$set deleted_at`, all queries filter `deleted_at: {$exists: false}`
-- ✅ `create()` returns `Result<String>` (hex ID, not ObjectId)
+- ✅ `create()` returns typed ID: `Result<UserId>`, `Result<ProductId>`, etc.
+- ✅ `find_by_id()` accepts typed ID: `&UserId`, `&ProductId`, etc.
 - ❌ NO business logic in repositories
 - ❌ NO `?` on mongodb errors (use explicit `.map_err()`)
 
@@ -399,11 +469,11 @@ pub struct UserDocument {
     pub deleted_at: Option<DateTime<Utc>>,
 }
 
-// Domain → Document
+// Domain → Document (DomainId → ObjectId)
 impl From<User> for UserDocument {
     fn from(user: User) -> Self {
         Self {
-            id: user.id.and_then(|id| ObjectId::parse_str(&id).ok()),
+            id: user.id.and_then(|id| ObjectId::parse_str(&*id).ok()),
             name: user.name,
             email: user.email,
             created_at: user.created_at,
@@ -413,11 +483,11 @@ impl From<User> for UserDocument {
     }
 }
 
-// Document → Domain
+// Document → Domain (ObjectId → DomainId)
 impl From<UserDocument> for User {
     fn from(doc: UserDocument) -> Self {
         Self {
-            id: doc.id.map(|oid| oid.to_hex()),
+            id: doc.id.map(|oid| UserId::new(oid.to_hex())),
             name: doc.name,
             email: doc.email,
             created_at: doc.created_at,
@@ -434,7 +504,7 @@ use `TryFrom<Entity> for Document` instead of `From`, since parsing can fail.
 ### Repository Template (`persistence/{entity}/repository.rs`)
 ```rust
 use crate::domain::error::{Error, Result};
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::model::UserDocument;
 use futures::stream::TryStreamExt;
@@ -478,23 +548,23 @@ impl UsersRepository {
         Ok(())
     }
 
-    // CREATE — returns String ID
+    // CREATE — returns typed UserId
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, user: &User) -> Result<String> {
+    pub async fn create(&self, user: &User) -> Result<UserId> {
         let doc = UserDocument::from(user.clone());
         let result = self.collection.insert_one(doc).await
             .map_err(|e| Error::database(e.to_string()))?;
 
         result.inserted_id.as_object_id()
-            .map(|oid| oid.to_hex())
+            .map(|oid| UserId::new(oid.to_hex()))
             .ok_or_else(|| Error::internal("Failed to get inserted ID"))
     }
 
-    // READ — returns domain entity, filters soft-deleted
+    // READ — accepts typed UserId, returns domain entity, filters soft-deleted
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &str) -> Result<Option<User>> {
-        let oid = ObjectId::parse_str(id)
-            .map_err(|_| Error::invalid_param("id", "User", id))?;
+    pub async fn find_by_id(&self, id: &UserId) -> Result<Option<User>> {
+        let oid = ObjectId::parse_str(&**id)
+            .map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
         let doc = self.collection
             .find_one(doc! { "_id": oid, "deleted_at": { "$exists": false } })
@@ -534,9 +604,9 @@ impl UsersRepository {
 
     // UPDATE
     #[tracing::instrument(skip_all)]
-    pub async fn update(&self, id: &str, user: &User) -> Result<bool> {
-        let oid = ObjectId::parse_str(id)
-            .map_err(|_| Error::invalid_param("id", "User", id))?;
+    pub async fn update(&self, id: &UserId, user: &User) -> Result<bool> {
+        let oid = ObjectId::parse_str(&**id)
+            .map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
         let doc = UserDocument::from(user.clone());
         let bson_doc = bson::serialize_to_document(&doc)
@@ -555,9 +625,9 @@ impl UsersRepository {
 
     // SOFT DELETE
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &str) -> Result<bool> {
-        let oid = ObjectId::parse_str(id)
-            .map_err(|_| Error::invalid_param("id", "User", id))?;
+    pub async fn delete(&self, id: &UserId) -> Result<bool> {
+        let oid = ObjectId::parse_str(&**id)
+            .map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
         let now = bson::DateTime::from_chrono(chrono::Utc::now());
 
@@ -591,25 +661,32 @@ pub mod repository;
 pub use repository::UsersRepository;
 ```
 
-## 6. Application Layer - Services & Commands (--service-only)
+## 6. Application Layer - Services (--service-only)
 
-### Key Concept: Application Commands
+### Key Concept: Direct Parameters, No Command Structs
 
-Services define their own input types (Command structs). They NEVER import DTOs from
-the Presentation layer. The conversion `DTO → Command` happens in Presentation via `From`.
+Services receive **direct parameters with typed IDs**. They NEVER define Command/DTO structs.
+Presentation handlers extract DTO fields and pass them individually.
 
 ```
-Presentation DTO → From<DTO> → Application Command → Service → Domain Entity
+Presentation: validate DTO → build typed IDs → call service(typed_id, param1, param2...)
 ```
+
+**Parameter rule**:
+- **≤6 params**: Pass directly to method
+- **>6 params**: Group using an existing domain type (e.g., `ProductMetadata`)
+- **NEVER** create service-layer input structs (CreateUser, CreateOrder, etc.)
 
 ### Rules
 - ✅ Import `Result<T>` from domain
-- ✅ Define Command structs (`CreateUser`, `UpdateUser`) in same file
+- ✅ Accept **typed IDs** (`&UserId`, `&ProductId`) — never plain `&str` for IDs
+- ✅ Accept scalar params directly (`&str`, `f64`, `i32`, etc.)
 - ✅ Orchestrate multiple repositories
 - ✅ Can call other services (composition)
 - ✅ Business validations (existence checks, rules, stock checks)
 - ✅ Use `#[tracing::instrument(skip_all, fields(...))]` with relevant fields
 - ✅ Handle side effects (stock decrement, etc.) atomically when possible
+- ❌ NO command/input structs in application layer
 - ❌ NO direct database access (use repositories)
 - ❌ NO HTTP/presentation concerns
 - ❌ NO imports from `crate::presentation::*`
@@ -617,26 +694,12 @@ Presentation DTO → From<DTO> → Application Command → Service → Domain En
 ### Template
 ```rust
 use crate::domain::error::{Error, Result};
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::UsersRepository;
 use std::sync::Arc;
 
-// ===== Application Commands =====
-
-#[derive(Debug, Clone)]
-pub struct CreateUser {
-    pub name: String,
-    pub email: String,
-}
-
-#[derive(Debug, Clone)]
-pub struct UpdateUser {
-    pub name: String,
-    pub email: String,
-}
-
-// ===== Service =====
+// NO command structs — pass params directly
 
 #[derive(Clone)]
 pub struct UsersService {
@@ -648,17 +711,17 @@ impl UsersService {
         Self { repo }
     }
 
-    #[tracing::instrument(skip_all, fields(email = %cmd.email))]
-    pub async fn create_user(&self, cmd: CreateUser) -> Result<User> {
-        if self.repo.find_by_email(&cmd.email).await?.is_some() {
-            return Err(Error::duplicate("User", "email", &cmd.email));
+    #[tracing::instrument(skip_all, fields(%email))]
+    pub async fn create_user(&self, name: &str, email: &str) -> Result<User> {
+        if self.repo.find_by_email(email).await?.is_some() {
+            return Err(Error::duplicate("User", "email", email));
         }
 
         let now = chrono::Utc::now();
         let mut user = User {
             id: None,
-            name: cmd.name,
-            email: cmd.email,
+            name: name.to_string(),
+            email: email.to_string(),
             created_at: now,
             updated_at: now,
             deleted_at: None,
@@ -672,9 +735,9 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn get_user(&self, id: &str) -> Result<User> {
+    pub async fn get_user(&self, id: &UserId) -> Result<User> {
         self.repo.find_by_id(id).await?
-            .ok_or_else(|| Error::not_found("User", id))
+            .ok_or_else(|| Error::not_found("User", id.to_string()))
     }
 
     #[tracing::instrument(skip_all)]
@@ -682,19 +745,19 @@ impl UsersService {
         self.repo.find_all(pagination).await
     }
 
-    #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn update_user(&self, id: &str, cmd: UpdateUser) -> Result<User> {
+    #[tracing::instrument(skip_all, fields(%id, %email))]
+    pub async fn update_user(&self, id: &UserId, name: &str, email: &str) -> Result<User> {
         let mut user = self.get_user(id).await?;
 
         // Business rule: Cannot change email to one already in use
-        if cmd.email != user.email {
-            if self.repo.find_by_email(&cmd.email).await?.is_some() {
-                return Err(Error::duplicate("User", "email", &cmd.email));
+        if email != user.email {
+            if self.repo.find_by_email(email).await?.is_some() {
+                return Err(Error::duplicate("User", "email", email));
             }
         }
 
-        user.name = cmd.name;
-        user.email = cmd.email;
+        user.name = name.to_string();
+        user.email = email.to_string();
         user.updated_at = chrono::Utc::now();
 
         self.repo.update(id, &user).await?;
@@ -703,10 +766,10 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn delete_user(&self, id: &str) -> Result<()> {
+    pub async fn delete_user(&self, id: &UserId) -> Result<()> {
         let deleted = self.repo.delete(id).await?;
         if !deleted {
-            return Err(Error::not_found("User", id));
+            return Err(Error::not_found("User", id.to_string()));
         }
         tracing::info!("User soft-deleted");
         Ok(())
@@ -714,7 +777,7 @@ impl UsersService {
 }
 ```
 
-### Service Composition (Cross-entity business rules)
+### Service Composition (Cross-entity, typed IDs)
 ```rust
 pub struct OrdersService {
     orders_repo: Arc<OrdersRepository>,
@@ -723,25 +786,31 @@ pub struct OrdersService {
 }
 
 impl OrdersService {
-    pub async fn create_order(&self, cmd: CreateOrder) -> Result<Order> {
+    // 3 params (≤6) → pass directly, typed IDs enforce correctness
+    pub async fn create_order(
+        &self,
+        user_id: &UserId,       // ← can't accidentally pass a ProductId
+        product_id: &ProductId, // ← type-safe FK
+        quantity: i32,
+    ) -> Result<Order> {
         // 1. Validate user exists
-        if self.users_repo.find_by_id(&cmd.user_id).await?.is_none() {
-            return Err(Error::not_found("User", &cmd.user_id));
+        if self.users_repo.find_by_id(user_id).await?.is_none() {
+            return Err(Error::not_found("User", user_id.to_string()));
         }
 
         // 2. Validate product exists and check stock
-        let product = self.products_repo.find_by_id(&cmd.product_id).await?
-            .ok_or_else(|| Error::not_found("Product", &cmd.product_id))?;
+        let product = self.products_repo.find_by_id(product_id).await?
+            .ok_or_else(|| Error::not_found("Product", product_id.to_string()))?;
 
-        if product.stock < cmd.quantity {
+        if product.stock < quantity {
             return Err(Error::business_rule(format!(
                 "Insufficient stock: requested {}, available {}",
-                cmd.quantity, product.stock
+                quantity, product.stock
             )));
         }
 
         // 3. Decrement stock atomically
-        self.products_repo.update_stock(&cmd.product_id, -cmd.quantity).await?;
+        self.products_repo.update_stock(product_id, -quantity).await?;
 
         // 4. Persist order
         // ...
@@ -749,15 +818,29 @@ impl OrdersService {
 }
 ```
 
+### Parameter Grouping Example (>6 params)
+```rust
+// create_product has 4 params because metadata groups category/sku/description/tags:
+pub async fn create_product(
+    &self,
+    name: &str,
+    price: f64,
+    stock: i32,
+    metadata: ProductMetadata,  // ← existing domain type groups 4 fields
+) -> Result<Product> { /* ... */ }
+```
+
 ## 7. Presentation Layer - HTTP (--api-only)
 
-### Key Concept: DTO ↔ Command ↔ Domain Conversions
+### Key Concept: DTO → Typed IDs → Service Params
 
 ```
-Request JSON → CreateUserInput (validated) → From → CreateUser (command) → Service
+Request JSON → CreateUserInput (validated) → handler builds typed IDs → service(params...)
                                                                             ↓
 Response JSON ← UserOutput ← From ← User (domain entity) ←────────────────┘
 ```
+
+**No `From<DTO> for Command`** — handlers extract fields and call service methods directly.
 
 ### 7.1 DTOs (`dtos/input.rs` and `dtos/output.rs`)
 
@@ -774,9 +857,8 @@ UserOutput        // Single entity response
 UserQuery         // GET /users (pagination params)
 ```
 
-#### Input Template (with Command conversion)
+#### Input Template (validation only, NO From→Command)
 ```rust
-use crate::application::users::CreateUser;
 use serde::Deserialize;
 use utoipa::ToSchema;
 use validator::Validate;
@@ -790,15 +872,7 @@ pub struct CreateUserInput {
     pub email: String,
 }
 
-// DTO → Application Command (MANDATORY for every input DTO)
-impl From<CreateUserInput> for CreateUser {
-    fn from(dto: CreateUserInput) -> Self {
-        Self {
-            name: dto.name,
-            email: dto.email,
-        }
-    }
-}
+// NO From<DTO> for Command — handler extracts fields directly
 ```
 
 #### Output Template
@@ -816,11 +890,11 @@ pub struct UserOutput {
     pub updated_at: String,
 }
 
-// Domain → Output DTO
+// Domain → Output DTO (DomainId → String via into_inner)
 impl From<User> for UserOutput {
     fn from(user: User) -> Self {
         Self {
-            id: user.id.unwrap_or_default(),       // Already a String
+            id: user.id.map(|id| id.into_inner()).unwrap_or_default(),
             name: user.name,
             email: user.email,
             created_at: user.created_at.to_rfc3339(),
@@ -834,6 +908,7 @@ impl From<User> for UserOutput {
 
 ```rust
 use crate::application::users::UsersService;
+use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
 use crate::presentation::{
     http::{
@@ -884,8 +959,26 @@ pub async fn create_user(
     State(service): State<Arc<UsersService>>,
     ValidatedJson(input): ValidatedJson<CreateUserInput>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.create_user(input.into()).await?;  // DTO → Command via .into()
-    Ok(GenericApiResponse::success(user.into()))           // Domain → Output via .into()
+    let user = service.create_user(&input.name, &input.email).await?;  // direct params
+    Ok(GenericApiResponse::success(user.into()))
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}",
+    tag = "Users",
+    responses(
+        (status = 200, description = "Get user", body = GenericApiResponse<UserOutput>)
+    )
+)]
+#[tracing::instrument(skip_all)]
+pub async fn get_user(
+    State(service): State<Arc<UsersService>>,
+    Path(id): Path<String>,
+) -> Result<GenericApiResponse<UserOutput>, ApiError> {
+    let user_id = UserId::new(id);                        // String → typed ID at boundary
+    let user = service.get_user(&user_id).await?;
+    Ok(GenericApiResponse::success(user.into()))
 }
 
 #[utoipa::path(
@@ -966,7 +1059,7 @@ impl From<DomainError> for ApiError {
                 tracing::error!("External service error [{}]: {}", service, message);
                 ApiError::Internal(format!("External service error: {}", service))
             }
-            DomainError::Database(msg) => {
+            DomainError::Database(ref msg) => {
                 tracing::error!("Database error: {}", msg);
                 ApiError::Internal("Database error occurred".to_string())
             }
@@ -1045,6 +1138,7 @@ touch src/presentation/http/payments/dtos/{mod.rs,input.rs,output.rs}
 - ✅ VERIFY with grep: no `bson::`/`mongodb::` in `src/domain/`
 - ✅ VERIFY with grep: no `crate::presentation` in `src/application/`
 - ✅ VERIFY with grep: no `crate::infrastructure` in `src/domain/`
+- ✅ VERIFY with grep: no `struct Create*` or `struct Update*` in `src/application/`
 - ❌ NEVER let domain depend on infrastructure or presentation
 - ❌ NEVER let application depend on presentation
 
@@ -1058,18 +1152,21 @@ touch src/presentation/http/payments/dtos/{mod.rs,input.rs,output.rs}
 - ❌ NEVER expose raw database errors to API responses
 
 ### Data Flow
-- ✅ ALWAYS: Presentation DTO → `From` → Application Command → Service
+- ✅ ALWAYS: Presentation validates DTO → builds typed IDs → calls service(params...)
 - ✅ ALWAYS: Service returns Domain Entity → `From` → Presentation Output
 - ✅ ALWAYS: Repository uses Document internally, returns Domain Entity externally
+- ✅ ALWAYS: String→DomainId conversion at Presentation boundary (in handlers)
 - ❌ NEVER expose domain entities directly in API responses
 - ❌ NEVER pass presentation DTOs into services
+- ❌ NEVER create command/input structs in application layer
 
-### DTOs & Commands
+### DTOs & Typed IDs
 - ✅ ALWAYS name DTOs: `*Input` for requests, `*Output` for responses
-- ✅ ALWAYS name Commands: `Create*`, `Update*` (in application layer)
-- ✅ ALWAYS implement `From<DTO> for Command` in dtos/input.rs
 - ✅ ALWAYS validate Input DTOs with `validator` derive
 - ✅ ALWAYS use `ValidatedJson` extractor in handlers
+- ✅ ALWAYS build typed IDs in handlers: `let user_id = UserId::new(id);`
+- ✅ ALWAYS use `id.into_inner()` in Output DTOs (DomainId → String)
+- ❌ NEVER create `From<DTO> for Command` — no commands exist
 
 ### Persistence
 - ✅ ALWAYS use `Collection<{Entity}Document>` (never `Collection<DomainEntity>`)
@@ -1077,22 +1174,29 @@ touch src/presentation/http/payments/dtos/{mod.rs,input.rs,output.rs}
 - ✅ ALWAYS name indexes with `_idx` suffix
 - ✅ ALWAYS support soft deletes (`deleted_at` field + query filter)
 - ✅ ALWAYS support pagination in `find_all()` methods
-- ✅ ALWAYS return `String` IDs from `create()`, not `ObjectId`
+- ✅ ALWAYS return typed IDs from `create()`: `Result<UserId>`, not `Result<String>`
+- ✅ ALWAYS accept typed IDs in `find_by_id()`: `&UserId`, not `&str`
 - ❌ NEVER put business logic in repositories
 
 ### Services
+- ✅ ALWAYS accept typed IDs (`&UserId`, `&ProductId`) — never `&str` for IDs
+- ✅ ALWAYS pass ≤6 params directly; group >6 using existing domain types
 - ✅ ALWAYS validate business rules before persistence
 - ✅ ALWAYS use `#[tracing::instrument(skip_all, fields(...))]`
 - ✅ CAN call other services (composition) or multiple repositories
+- ❌ NEVER create command/input structs (CreateUser, CreateOrder, etc.)
 - ❌ NEVER access database directly
 - ❌ NEVER import from `crate::presentation`
 
 ### Handlers
 - ✅ ALWAYS use `utoipa::path` macro for OpenAPI
 - ✅ ALWAYS extract `State<Arc<Service>>`
-- ✅ ALWAYS convert: `input.into()` for commands, `entity.into()` for outputs
+- ✅ ALWAYS build typed IDs at boundary: `UserId::new(id)`
+- ✅ ALWAYS pass DTO fields directly to service: `service.create(&req.name, &req.email)`
+- ✅ ALWAYS convert domain output: `entity.into()` for responses
 - ❌ NEVER put business logic in handlers
 - ❌ NEVER call repositories directly from handlers
+- ❌ NEVER pass raw `String` IDs to services
 
 ## 10. Performance & Best Practices
 
@@ -1128,28 +1232,31 @@ touch src/presentation/http/payments/dtos/{mod.rs,input.rs,output.rs}
 ```rust
 // Domain (pure — no external crates)
 use crate::domain::error::{Error, Result};
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
+use crate::domain::values;  // for DomainId<T>
 
-// Application (domain + infra repos, NO presentation)
+// Application (domain + infra repos, NO presentation, NO command structs)
 use crate::domain::error::{Error, Result};
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::UsersRepository;
 use std::sync::Arc;
 
 // Infrastructure Persistence Model
-use crate::domain::users::User;
+use crate::domain::users::{User, UserId};
 use crate::infrastructure::serde::chrono_bson::ChronoAsBson;
 use bson::oid::ObjectId;
 
-// Presentation Handler
+// Presentation Handler (builds typed IDs, passes params directly)
 use crate::application::users::UsersService;
+use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
 use axum::extract::{State, Path, Query};
 use crate::presentation::http::validation::ValidatedJson;
 
-// Presentation DTO Input (imports Application Command for From)
-use crate::application::users::CreateUser;
+// Presentation DTO Input (validation only, NO command imports)
+use serde::Deserialize;
+use validator::Validate;
 ```
 
 ### Common Error Patterns
@@ -1175,15 +1282,22 @@ Error::internal("Unexpected state")
 
 ### Conversion Patterns
 ```rust
-// ObjectId (ONLY in infrastructure layer)
-let oid = ObjectId::parse_str(id)
-    .map_err(|_| Error::invalid_param("id", "User", id))?;
+// String → Typed ID (in handlers, at presentation boundary)
+let user_id = UserId::new(id);
+let product_id = ProductId::new(id);
 
-// Optional to Result (in services)
-user.ok_or_else(|| Error::not_found("User", id))?
+// Typed ID → ObjectId (ONLY in infrastructure layer)
+let oid = ObjectId::parse_str(&**id)    // Deref to &str
+    .map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
-// DTO → Command (in handlers)
-let user = service.create_user(input.into()).await?;
+// Optional to Result (in services, with typed ID)
+user.ok_or_else(|| Error::not_found("User", id.to_string()))?
+
+// Direct params (in handlers — NO .into() for commands)
+let user = service.create_user(&req.name, &req.email).await?;
+
+// Typed ID → String (in output DTOs)
+id: user.id.map(|id| id.into_inner()).unwrap_or_default()
 
 // Domain → Output (in handlers)
 Ok(GenericApiResponse::success(user.into()))
