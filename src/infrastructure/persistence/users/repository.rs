@@ -1,4 +1,4 @@
-use crate::domain::error::{Error, Result};
+use crate::domain::error::{DomainResult, Error};
 use crate::domain::users::{User, UserId};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::model::UserDocument;
@@ -22,7 +22,7 @@ impl UsersRepository {
     }
 
     /// Create database indexes (idempotent — safe to call on every startup)
-    pub async fn create_indexes(&self) -> Result<()> {
+    pub async fn create_indexes(&self) -> DomainResult<()> {
         let indexes = vec![
             IndexModel::builder()
                 .keys(doc! { "email": 1 })
@@ -63,7 +63,7 @@ impl UsersRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, user: &User) -> Result<UserId> {
+    pub async fn create(&self, user: &User) -> DomainResult<UserId> {
         let doc = UserDocument::from(user.clone());
         let result = self
             .collection
@@ -81,7 +81,7 @@ impl UsersRepository {
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &UserId) -> Result<Option<User>> {
+    pub async fn find_by_id(&self, id: &UserId) -> DomainResult<Option<User>> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
@@ -95,7 +95,7 @@ impl UsersRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
+    pub async fn find_by_email(&self, email: &str) -> DomainResult<Option<User>> {
         let doc = self
             .collection
             .find_one(doc! {
@@ -109,7 +109,7 @@ impl UsersRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_all(&self, pagination: Pagination) -> Result<Vec<User>> {
+    pub async fn find_all(&self, pagination: Pagination) -> DomainResult<Vec<User>> {
         let cursor = self
             .collection
             .find(doc! { "deleted_at": { "$exists": false } })
@@ -130,7 +130,7 @@ impl UsersRepository {
     // ===== UPDATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn update(&self, id: &UserId, user: &User) -> Result<bool> {
+    pub async fn update(&self, id: &UserId, user: &User) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
@@ -153,7 +153,7 @@ impl UsersRepository {
     // ===== SOFT DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &UserId) -> Result<bool> {
+    pub async fn delete(&self, id: &UserId) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "User", &**id))?;
 
@@ -174,7 +174,7 @@ impl UsersRepository {
     // ===== COUNT =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn count(&self) -> Result<u64> {
+    pub async fn count(&self) -> DomainResult<u64> {
         self.collection
             .count_documents(doc! { "deleted_at": { "$exists": false } })
             .await

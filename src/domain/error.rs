@@ -182,4 +182,4 @@ impl DomainError {
 pub type Error = DomainError;
 
 // Alias para Result con nuestro error
-pub type Result<T> = std::result::Result<T, DomainError>;
+pub type DomainResult<T> = std::result::Result<T, DomainError>;

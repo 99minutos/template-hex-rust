@@ -1,4 +1,4 @@
-use crate::domain::error::{Error, Result};
+use crate::domain::error::{DomainResult, Error};
 use crate::domain::products::{Product, ProductId, ProductMetadata};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::products::model::ProductDocument;
@@ -22,7 +22,7 @@ impl ProductsRepository {
     }
 
     /// Create database indexes (idempotent — safe to call on every startup)
-    pub async fn create_indexes(&self) -> Result<()> {
+    pub async fn create_indexes(&self) -> DomainResult<()> {
         let indexes = vec![
             IndexModel::builder()
                 .keys(doc! { "metadata.sku": 1 })
@@ -88,7 +88,7 @@ impl ProductsRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, product: &Product) -> Result<ProductId> {
+    pub async fn create(&self, product: &Product) -> DomainResult<ProductId> {
         let doc = ProductDocument::from(product.clone());
         let result = self
             .collection
@@ -106,7 +106,7 @@ impl ProductsRepository {
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &ProductId) -> Result<Option<Product>> {
+    pub async fn find_by_id(&self, id: &ProductId) -> DomainResult<Option<Product>> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
@@ -120,7 +120,7 @@ impl ProductsRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_all(&self, pagination: Pagination) -> Result<Vec<Product>> {
+    pub async fn find_all(&self, pagination: Pagination) -> DomainResult<Vec<Product>> {
         let cursor = self
             .collection
             .find(doc! { "deleted_at": { "$exists": false } })
@@ -145,7 +145,7 @@ impl ProductsRepository {
         &self,
         id: &ProductId,
         metadata: &ProductMetadata,
-    ) -> Result<bool> {
+    ) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
@@ -171,7 +171,7 @@ impl ProductsRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn update_stock(&self, id: &ProductId, quantity_delta: i32) -> Result<bool> {
+    pub async fn update_stock(&self, id: &ProductId, quantity_delta: i32) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
@@ -195,7 +195,7 @@ impl ProductsRepository {
     // ===== SOFT DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &ProductId) -> Result<bool> {
+    pub async fn delete(&self, id: &ProductId) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Product", &**id))?;
 
@@ -216,7 +216,7 @@ impl ProductsRepository {
     // ===== COUNT =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn count(&self) -> Result<u64> {
+    pub async fn count(&self) -> DomainResult<u64> {
         self.collection
             .count_documents(doc! { "deleted_at": { "$exists": false } })
             .await

@@ -1,4 +1,4 @@
-use crate::domain::error::{Error, Result};
+use crate::domain::error::{DomainResult, Error};
 use crate::domain::products::{Product, ProductId, ProductMetadata, ProductStatus};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::products::ProductsRepository;
@@ -21,7 +21,7 @@ impl ProductsService {
         price: f64,
         stock: i32,
         metadata: ProductMetadata,
-    ) -> Result<Product> {
+    ) -> DomainResult<Product> {
         let now = chrono::Utc::now();
         let mut product = Product {
             id: None,
@@ -43,7 +43,7 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn get_product(&self, id: &ProductId) -> Result<Product> {
+    pub async fn get_product(&self, id: &ProductId) -> DomainResult<Product> {
         self.repo
             .find_by_id(id)
             .await?
@@ -51,7 +51,7 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn list_products(&self, pagination: Pagination) -> Result<Vec<Product>> {
+    pub async fn list_products(&self, pagination: Pagination) -> DomainResult<Vec<Product>> {
         self.repo.find_all(pagination).await
     }
 
@@ -60,7 +60,7 @@ impl ProductsService {
         &self,
         id: &ProductId,
         metadata: ProductMetadata,
-    ) -> Result<Product> {
+    ) -> DomainResult<Product> {
         let updated = self.repo.update_metadata(id, &metadata).await?;
         if !updated {
             return Err(Error::not_found("Product", id.to_string()));
@@ -71,7 +71,7 @@ impl ProductsService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn delete_product(&self, id: &ProductId) -> Result<()> {
+    pub async fn delete_product(&self, id: &ProductId) -> DomainResult<()> {
         let deleted = self.repo.delete(id).await?;
         if !deleted {
             return Err(Error::not_found("Product", id.to_string()));
@@ -82,7 +82,7 @@ impl ProductsService {
 
     /// Atomically decrement stock. Returns error if product not found or insufficient.
     #[tracing::instrument(skip_all, fields(%id, %quantity))]
-    pub async fn decrement_stock(&self, id: &ProductId, quantity: i32) -> Result<()> {
+    pub async fn decrement_stock(&self, id: &ProductId, quantity: i32) -> DomainResult<()> {
         let product = self.get_product(id).await?;
 
         if product.stock < quantity {

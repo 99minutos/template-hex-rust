@@ -1,4 +1,4 @@
-use crate::domain::error::{Error, Result};
+use crate::domain::error::{DomainResult, Error};
 use crate::domain::orders::{Order, OrderId};
 use crate::domain::products::ProductId;
 use crate::domain::users::UserId;
@@ -34,7 +34,7 @@ impl OrdersService {
         user_id: &UserId,
         product_id: &ProductId,
         quantity: i32,
-    ) -> Result<Order> {
+    ) -> DomainResult<Order> {
         // 1. Validate user exists
         if self.users_repo.find_by_id(user_id).await?.is_none() {
             return Err(Error::not_found("User", user_id.to_string()));
@@ -97,7 +97,7 @@ impl OrdersService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn get_order(&self, id: &OrderId) -> Result<Order> {
+    pub async fn get_order(&self, id: &OrderId) -> DomainResult<Order> {
         self.orders_repo
             .find_by_id(id)
             .await?
@@ -105,7 +105,7 @@ impl OrdersService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn list_orders(&self, pagination: Pagination) -> Result<Vec<Order>> {
+    pub async fn list_orders(&self, pagination: Pagination) -> DomainResult<Vec<Order>> {
         self.orders_repo.find_all(pagination).await
     }
 
@@ -114,7 +114,7 @@ impl OrdersService {
         &self,
         user_id: &UserId,
         pagination: Pagination,
-    ) -> Result<Vec<Order>> {
+    ) -> DomainResult<Vec<Order>> {
         // Validate user exists
         if self.users_repo.find_by_id(user_id).await?.is_none() {
             return Err(Error::not_found("User", user_id.to_string()));

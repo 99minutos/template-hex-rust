@@ -1,4 +1,4 @@
-use crate::domain::error::{Error, Result};
+use crate::domain::error::{Error, DomainResult};
 use crate::domain::orders::{Order, OrderId};
 use crate::domain::users::UserId;
 use crate::infrastructure::persistence::Pagination;
@@ -23,7 +23,7 @@ impl OrdersRepository {
     }
 
     /// Create database indexes (idempotent — safe to call on every startup)
-    pub async fn create_indexes(&self) -> Result<()> {
+    pub async fn create_indexes(&self) -> DomainResult<()> {
         let indexes = vec![
             IndexModel::builder()
                 .keys(doc! { "deleted_at": 1, "user_id": 1, "created_at": -1 })
@@ -71,7 +71,7 @@ impl OrdersRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, order: &Order) -> Result<OrderId> {
+    pub async fn create(&self, order: &Order) -> DomainResult<OrderId> {
         let doc = OrderDocument::try_from(order.clone())?;
 
         let result = self
@@ -90,7 +90,7 @@ impl OrdersRepository {
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &OrderId) -> Result<Option<Order>> {
+    pub async fn find_by_id(&self, id: &OrderId) -> DomainResult<Option<Order>> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Order", &**id))?;
 
@@ -104,7 +104,7 @@ impl OrdersRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_all(&self, pagination: Pagination) -> Result<Vec<Order>> {
+    pub async fn find_all(&self, pagination: Pagination) -> DomainResult<Vec<Order>> {
         let cursor = self
             .collection
             .find(doc! { "deleted_at": { "$exists": false } })
@@ -127,7 +127,7 @@ impl OrdersRepository {
         &self,
         user_id: &UserId,
         pagination: Pagination,
-    ) -> Result<Vec<Order>> {
+    ) -> DomainResult<Vec<Order>> {
         let oid = ObjectId::parse_str(&**user_id)
             .map_err(|_| Error::invalid_param("user_id", "User", &**user_id))?;
 
@@ -154,7 +154,7 @@ impl OrdersRepository {
     // ===== SOFT DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &OrderId) -> Result<bool> {
+    pub async fn delete(&self, id: &OrderId) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Order", &**id))?;
 
@@ -175,7 +175,7 @@ impl OrdersRepository {
     // ===== COUNT =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn count(&self) -> Result<u64> {
+    pub async fn count(&self) -> DomainResult<u64> {
         self.collection
             .count_documents(doc! { "deleted_at": { "$exists": false } })
             .await

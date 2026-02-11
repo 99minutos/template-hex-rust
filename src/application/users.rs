@@ -1,4 +1,4 @@
-use crate::domain::error::{Error, Result};
+use crate::domain::error::{DomainResult, Error};
 use crate::domain::users::{User, UserId};
 use crate::infrastructure::persistence::Pagination;
 use crate::infrastructure::persistence::users::UsersRepository;
@@ -15,7 +15,7 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all, fields(%email))]
-    pub async fn create_user(&self, name: &str, email: &str) -> Result<User> {
+    pub async fn create_user(&self, name: &str, email: &str) -> DomainResult<User> {
         if self.repo.find_by_email(email).await?.is_some() {
             return Err(Error::duplicate("User", "email", email));
         }
@@ -38,7 +38,7 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn get_user(&self, id: &UserId) -> Result<User> {
+    pub async fn get_user(&self, id: &UserId) -> DomainResult<User> {
         self.repo
             .find_by_id(id)
             .await?
@@ -46,12 +46,12 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn list_users(&self, pagination: Pagination) -> Result<Vec<User>> {
+    pub async fn list_users(&self, pagination: Pagination) -> DomainResult<Vec<User>> {
         self.repo.find_all(pagination).await
     }
 
     #[tracing::instrument(skip_all, fields(%id, %email))]
-    pub async fn update_user(&self, id: &UserId, name: &str, email: &str) -> Result<User> {
+    pub async fn update_user(&self, id: &UserId, name: &str, email: &str) -> DomainResult<User> {
         let mut user = self.get_user(id).await?;
 
         // Business rule: cannot change email to one already in use
@@ -72,12 +72,12 @@ impl UsersService {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn count_users(&self) -> Result<u64> {
+    pub async fn count_users(&self) -> DomainResult<u64> {
         self.repo.count().await
     }
 
     #[tracing::instrument(skip_all, fields(%id))]
-    pub async fn delete_user(&self, id: &UserId) -> Result<()> {
+    pub async fn delete_user(&self, id: &UserId) -> DomainResult<()> {
         let deleted = self.repo.delete(id).await?;
         if !deleted {
             return Err(Error::not_found("User", id.to_string()));
