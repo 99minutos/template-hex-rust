@@ -4,7 +4,7 @@ use crate::infrastructure::persistence::Pagination;
 use crate::presentation::{
     http::{
         error::ApiError,
-        response::GenericApiResponse,
+        response::{GenericApiResponse, GenericPagination},
         users::dtos::{CreateUserInput, UserOutput},
         validation::ValidatedJson,
     },
@@ -26,7 +26,7 @@ pub struct UserQuery {
     pub page: Option<u32>,
 
     #[validate(range(min = 1, max = 100))]
-    pub page_size: Option<u32>,
+    pub limit: Option<u32>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -77,22 +77,23 @@ pub async fn get_user(
     tag = "Users",
     params(UserQuery),
     responses(
-        (status = 200, description = "List users", body = GenericApiResponse<Vec<UserOutput>>)
+        (status = 200, description = "List users (paginated)", body = GenericApiResponse<GenericPagination<UserOutput>>)
     )
 )]
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(service): State<Arc<UsersService>>,
     Query(query): Query<UserQuery>,
-) -> Result<GenericApiResponse<Vec<UserOutput>>, ApiError> {
-    let pagination = Pagination {
-        page: query.page.unwrap_or(1),
-        page_size: query.page_size.unwrap_or(20),
-    };
+) -> Result<GenericApiResponse<GenericPagination<UserOutput>>, ApiError> {
+    let page = query.page.unwrap_or(1);
+    let limit = query.limit.unwrap_or(20);
+    let pagination = Pagination { page, limit };
 
     let users = service.list_users(pagination).await?;
-    let dtos = users.into_iter().map(Into::into).collect();
-    Ok(GenericApiResponse::success(dtos))
+    let total = service.count_users().await?;
+    let data: Vec<UserOutput> = users.into_iter().map(Into::into).collect();
+
+    Ok(GenericApiResponse::paginated(data, total, page, limit))
 }
 
 #[utoipa::path(

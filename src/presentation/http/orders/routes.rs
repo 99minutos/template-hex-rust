@@ -28,7 +28,7 @@ pub struct OrderQuery {
     pub page: Option<u32>,
 
     #[validate(range(min = 1, max = 100))]
-    pub page_size: Option<u32>,
+    pub limit: Option<u32>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -93,7 +93,7 @@ pub async fn list_orders(
 ) -> Result<GenericApiResponse<Vec<OrderOutput>>, ApiError> {
     let pagination = Pagination {
         page: query.page.unwrap_or(1),
-        page_size: query.page_size.unwrap_or(20),
+        limit: query.limit.unwrap_or(20),
     };
 
     let orders = service.list_orders(pagination).await?;

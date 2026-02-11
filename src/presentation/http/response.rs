@@ -9,6 +9,25 @@ use tracing_opentelemetry::OpenTelemetrySpanExt;
 use utoipa::ToSchema;
 
 #[derive(Debug, Serialize, ToSchema)]
+pub struct GenericPagination<T> {
+    pub data: Vec<T>,
+    pub total: u64,
+    pub page: u32,
+    pub limit: u32,
+}
+
+impl<T> GenericPagination<T> {
+    pub fn new(data: Vec<T>, total: u64, page: u32, limit: u32) -> Self {
+        Self {
+            data,
+            total,
+            page,
+            limit,
+        }
+    }
+}
+
+#[derive(Debug, Serialize, ToSchema)]
 pub struct GenericApiResponse<T> {
     #[schema(example = "0af7651916cd43dd8448eb211c80319c")]
     pub trace_id: String,
@@ -62,6 +81,37 @@ impl<T> GenericApiResponse<T> {
             data: None,
             cause: Some(cause),
             status,
+        }
+    }
+}
+
+impl<T: Serialize> GenericApiResponse<GenericPagination<T>> {
+    /// Wraps a paginated collection with metadata.
+    ///
+    /// # Example
+    /// ```ignore
+    /// let pagination = Pagination { page: 1, limit: 20 };
+    /// let users = service.list_users(pagination.clone()).await?;
+    /// let total = service.count_users().await?;
+    ///
+    /// Ok(GenericApiResponse::paginated(
+    ///     users.into_iter().map(Into::into).collect(),
+    ///     total,
+    ///     pagination.page,
+    ///     pagination.limit,
+    /// ))
+    /// ```
+    pub fn paginated(data: Vec<T>, total: u64, page: u32, limit: u32) -> Self {
+        GenericApiResponse {
+            trace_id: Self::get_current_trace_id(),
+            data: Some(GenericPagination {
+                data,
+                total,
+                page,
+                limit,
+            }),
+            cause: None,
+            status: StatusCode::OK,
         }
     }
 }

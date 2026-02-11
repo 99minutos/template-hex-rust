@@ -71,6 +71,11 @@ impl UsersService {
         Ok(user)
     }
 
+    #[tracing::instrument(skip_all)]
+    pub async fn count_users(&self) -> Result<u64> {
+        self.repo.count().await
+    }
+
     #[tracing::instrument(skip_all, fields(%id))]
     pub async fn delete_user(&self, id: &UserId) -> Result<()> {
         let deleted = self.repo.delete(id).await?;

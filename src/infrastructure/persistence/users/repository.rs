@@ -114,7 +114,7 @@ impl UsersRepository {
             .collection
             .find(doc! { "deleted_at": { "$exists": false } })
             .skip(pagination.skip())
-            .limit(pagination.limit())
+            .limit(pagination.limit_i64())
             .sort(doc! { "created_at": -1 })
             .await
             .map_err(|e| Error::database(e.to_string()))?;

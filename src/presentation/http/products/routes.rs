@@ -26,7 +26,7 @@ pub struct ProductQuery {
     pub page: Option<u32>,
 
     #[validate(range(min = 1, max = 100))]
-    pub page_size: Option<u32>,
+    pub limit: Option<u32>,
 }
 
 pub fn router() -> Router<AppState> {
@@ -97,7 +97,7 @@ pub async fn list_products(
 ) -> Result<GenericApiResponse<Vec<ProductOutput>>, ApiError> {
     let pagination = Pagination {
         page: query.page.unwrap_or(1),
-        page_size: query.page_size.unwrap_or(20),
+        limit: query.limit.unwrap_or(20),
     };
 
     let products = service.list_products(pagination).await?;
