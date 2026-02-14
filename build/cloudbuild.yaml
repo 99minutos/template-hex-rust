@@ -29,11 +29,13 @@ steps:
       - "deploy"
       - "$_SERVICE_NAME"
       - "--image=us-docker.pkg.dev/$PROJECT_ID/artifacts/$_SERVICE_NAME:$COMMIT_SHA"
+      - "--service-account=$SERVICE_ACCOUNT_EMAIL"
       - "--region=$_REGION"
       - "--platform=managed"
       - "--allow-unauthenticated"
       - "--cpu-boost"
-      - "--set-env-vars=APP_ENV=$_APP_ENV,SERVICE_NAME=$_SERVICE_NAME,PROJECT_ID=$PROJECT_ID"
+      - "--set-env-vars=SERVICE_NAME=$_SERVICE_NAME"
+      - "--set-env-vars=PROJECT_ID=$PROJECT_ID"
       # Configure sus secretos y envs adicionales manualmente o vía sustituciones
 
 substitutions:
