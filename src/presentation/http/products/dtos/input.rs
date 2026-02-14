@@ -35,14 +35,3 @@ pub struct UpdateProductMetadataInput {
     #[validate(length(min = 1, message = "SKU is required"))]
     pub sku: String,
 }
-
-impl From<UpdateProductMetadataInput> for crate::domain::products::ProductMetadata {
-    fn from(dto: UpdateProductMetadataInput) -> Self {
-        Self {
-            description: dto.description,
-            category: dto.category,
-            tags: dto.tags,
-            sku: dto.sku,
-        }
-    }
-}

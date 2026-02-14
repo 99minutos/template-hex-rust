@@ -53,8 +53,8 @@ impl From<DomainError> for ApiError {
                 tracing::error!("External service error [{}]: {}", service, message);
                 ApiError::Internal(format!("External service error: {}", service))
             }
-            DomainError::Database(e) => {
-                tracing::error!("Database error: {:?}", e);
+            DomainError::Database(msg) => {
+                tracing::error!("Database error: {}", msg);
                 ApiError::Internal("Database error occurred".to_string())
             }
             DomainError::Internal(msg) => {

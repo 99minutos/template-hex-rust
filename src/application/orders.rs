@@ -1,12 +1,11 @@
-use crate::domain::error::{Error, Result};
-use crate::{
-    domain::orders::Order,
-    infrastructure::persistence::{
-        orders::OrdersRepository, products::ProductsRepository, users::UsersRepository,
-    },
-    presentation::http::orders::dtos::CreateOrderInput,
-};
-use mongodb::bson::oid::ObjectId;
+use crate::domain::error::{DomainResult, Error};
+use crate::domain::orders::{Order, OrderId};
+use crate::domain::products::ProductId;
+use crate::domain::users::UserId;
+use crate::infrastructure::persistence::Pagination;
+use crate::infrastructure::persistence::orders::OrdersRepository;
+use crate::infrastructure::persistence::products::ProductsRepository;
+use crate::infrastructure::persistence::users::UsersRepository;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -29,62 +28,98 @@ impl OrdersService {
         }
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn create_order(&self, dto: CreateOrderInput) -> Result<Order> {
-        // 1. Validate User
-        if self.users_repo.find_by_id(&dto.user_id).await?.is_none() {
-            return Err(Error::not_found("User", &dto.user_id));
+    #[tracing::instrument(skip_all, fields(%user_id, %product_id, %quantity))]
+    pub async fn create_order(
+        &self,
+        user_id: &UserId,
+        product_id: &ProductId,
+        quantity: i32,
+    ) -> DomainResult<Order> {
+        // 1. Validate user exists
+        if self.users_repo.find_by_id(user_id).await?.is_none() {
+            return Err(Error::not_found("User", user_id.to_string()));
         }
 
-        // 2. Validate Product & Get Price
+        // 2. Validate product exists and get price
         let product = self
             .products_repo
-            .find_by_id(&dto.product_id)
+            .find_by_id(product_id)
             .await?
-            .ok_or_else(|| Error::not_found("Product", &dto.product_id))?;
+            .ok_or_else(|| Error::not_found("Product", product_id.to_string()))?;
 
-        // 3. Business Logic: Check stock
-        if product.stock < dto.quantity {
+        // 3. Business rule: check stock availability
+        if product.stock < quantity {
             return Err(Error::business_rule(format!(
                 "Insufficient stock: requested {}, available {}",
-                dto.quantity, product.stock
+                quantity, product.stock
             )));
         }
 
-        let total_price = product.price * (dto.quantity as f64);
-        let user_id = ObjectId::parse_str(&dto.user_id)
-            .map_err(|_| Error::invalid_param("user_id", "User", &dto.user_id))?;
+        // 4. Calculate total price
+        let total_price = product.price * (quantity as f64);
 
-        let product_id = product
+        // 5. Decrement stock atomically
+        let pid = product
             .id
+            .as_ref()
             .ok_or_else(|| Error::internal("Product missing ID"))?;
 
-        // 4. Persistence
+        let stock_updated = self.products_repo.update_stock(pid, -quantity).await?;
+
+        if !stock_updated {
+            return Err(Error::business_rule(
+                "Failed to reserve stock — product may have been modified concurrently",
+            ));
+        }
+
+        // 6. Persist order
+        let now = chrono::Utc::now();
         let mut order = Order {
             id: None,
-            user_id,
-            product_id,
-            quantity: dto.quantity,
+            user_id: user_id.clone(),
+            product_id: product_id.clone(),
+            quantity,
             total_price,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
         };
 
         let id = self.orders_repo.create(&order).await?;
         order.id = Some(id);
+
+        tracing::info!(
+            order_id = %order.id.as_deref().unwrap_or("unknown"),
+            %total_price,
+            "Order created"
+        );
         Ok(order)
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn get_order(&self, id: &str) -> Result<Order> {
+    #[tracing::instrument(skip_all, fields(%id))]
+    pub async fn get_order(&self, id: &OrderId) -> DomainResult<Order> {
         self.orders_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| Error::not_found("Order", id))
+            .ok_or_else(|| Error::not_found("Order", id.to_string()))
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn list_orders(&self) -> Result<Vec<Order>> {
-        Ok(self.orders_repo.find_all().await?)
+    pub async fn list_orders(&self, pagination: Pagination) -> DomainResult<Vec<Order>> {
+        self.orders_repo.find_all(pagination).await
+    }
+
+    #[tracing::instrument(skip_all, fields(%user_id))]
+    pub async fn list_orders_by_user(
+        &self,
+        user_id: &UserId,
+        pagination: Pagination,
+    ) -> DomainResult<Vec<Order>> {
+        // Validate user exists
+        if self.users_repo.find_by_id(user_id).await?.is_none() {
+            return Err(Error::not_found("User", user_id.to_string()));
+        }
+
+        self.orders_repo.find_by_user_id(user_id, pagination).await
     }
 }

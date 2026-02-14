@@ -1,170 +1,399 @@
 # Rust Microservice Template
 
-This is a template for building Rust microservices using a layered architecture. It uses `axum` for the web server and `mongodb` for the database.
+Production-ready Rust microservice using **DDD/Hexagonal Architecture** with strict layer isolation and **type-safe domain IDs**.
+
+**Stack**: Rust 2024 · Axum 0.8 · MongoDB 3.x · Tokio · OpenTelemetry · utoipa (Swagger)
+
+## Architecture
+
+```text
+      Request
+         │
+         ▼
+┌────────────────┐   From<DTO> → Cmd
+│  Presentation   │───────────────────┐
+│  (HTTP/Axum)    │                   ▼
+└───────┬────────┘            ┌──────────────┐
+        │ uses                │  Application  │ ← owns Command structs
+        │                     │  (Services)   │
+        │                     └──────┬───────┘
+        │                            │ uses
+        ▼                            ▼
+┌────────────────┐  From/TryFrom  ┌──────────┐
+│ Infrastructure  │◄─────────────►│  Domain   │
+│  (Documents +  │                │  (pure)   │
+│   Repositories)│                └──────────┘
+└───────┬────────┘
+        │
+        ▼
+     MongoDB
+```
+
+### Dependency Rules (Enforced)
+
+| Direction                                | Status       |
+| ---------------------------------------- | ------------ |
+| Presentation → Application → Domain      | ✅ Allowed   |
+| Infrastructure ↔ Domain (via From/Into) | ✅ Allowed   |
+| Domain → Infrastructure                  | ❌ Forbidden |
+| Domain → Presentation                    | ❌ Forbidden |
+| Application → Presentation               | ❌ Forbidden |
+
+Verify with:
+
+```bash
+grep -r "use crate::infrastructure" src/domain/      # Must return 0 results
+grep -r "use crate::presentation" src/application/   # Must return 0 results
+grep -r "bson::\|mongodb::" src/domain/              # Must return 0 results
+grep -rE "struct Create|struct Update" src/application/  # Must return 0 results (no command structs)
+```
+
+## Project Structure
+
+```text
+src/
+├── domain/                          # ⚪ Core Business (ZERO external deps)
+│   ├── {entity}.rs                  #   Entities + Marker + typed ID (DomainId<Marker>)
+│   ├── values.rs                    #   DomainId<T> generic type-safe ID
+│   ├── error.rs                     #   DomainError + Result<T> alias + helpers
+│   └── mod.rs
+│
+├── application/                     # 🔵 Business Logic
+│   ├── {entity}.rs                  #   Services (direct params, NO command structs)
+│   └── mod.rs
+│
+├── infrastructure/                  # 🟢 External I/O
+│   ├── persistence/
+│   │   ├── {entity}/
+│   │   │   ├── model.rs             #   {Entity}Document (BSON-aware)
+│   │   │   ├── repository.rs        #   Collection<Document>, returns Domain entities
+│   │   │   └── mod.rs
+│   │   └── mod.rs                   #   Pagination struct
+│   ├── providers/
+│   │   ├── mongo.rs                 #   MongoProvider (connection)
+│   │   ├── redis.rs                 #   RedisProvider
+│   │   └── telemetry.rs             #   Tracing + OpenTelemetry + Stackdriver
+│   └── serde/
+│       └── chrono_bson.rs           #   ChronoAsBson (used ONLY by Documents)
+│
+├── presentation/                    # 🟡 API Layer
+│   ├── http/
+│   │   ├── {entity}/
+│   │   │   ├── dtos/
+│   │   │   │   ├── input.rs         #   Input DTOs (validation only, no From→Command)
+│   │   │   │   ├── output.rs        #   Output DTOs + From<Entity> → Output
+│   │   │   │   └── mod.rs
+│   │   │   ├── routes.rs            #   Handlers: validate, build typed IDs, call service
+│   │   │   └── mod.rs
+│   │   ├── error.rs                 #   DomainError → HTTP status mapping
+│   │   ├── response.rs              #   GenericApiResponse<T> with trace_id
+│   │   └── validation.rs            #   ValidatedJson extractor
+│   ├── server.rs                    #   Axum app + graceful shutdown
+│   ├── state.rs                     #   AppState + FromRef impls
+│   └── openapi.rs                   #   utoipa registry
+│
+├── config.rs                        #   Env loading (dotenvy + OnceLock)
+└── main.rs                          #   DI wiring: Repo → Service → State → Server
+```
+
+## Key Design Decisions
+
+### Type-Safe Domain IDs (`DomainId<T>`)
+
+Every entity defines a **marker type** and a typed ID alias using `DomainId<T>`. This prevents accidentally passing a `UserId` where a `ProductId` is expected:
+
+```rust
+// src/domain/values.rs — generic type-safe ID
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct DomainId<T> {
+    id: String,
+    _marker: PhantomData<T>,
+}
+// Serializes as plain string "abc123", not {"id": "abc123"}
+// Implements: Deref<Target=str>, Display, AsRef<str>, From<String>
+```
+
+```rust
+// src/domain/users.rs — each entity defines Marker + type alias
+use crate::domain::values;
+
+#[derive(Debug, Clone)]
+pub struct UserMarker;
+pub type UserId = values::DomainId<UserMarker>;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct User {
+    pub id: Option<UserId>,           // Typed ID, NOT Option<String>
+    pub name: String,
+    pub email: String,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+```
+
+Foreign keys are also typed — `Order` uses `UserId` and `ProductId`, not plain `String`:
+
+```rust
+pub struct Order {
+    pub id: Option<OrderId>,
+    pub user_id: UserId,       // Type-safe FK — can't mix with ProductId
+    pub product_id: ProductId, // Type-safe FK
+    // ...
+}
+```
+
+### Persistence Models (Documents)
+
+Each entity has a `{Entity}Document` in infrastructure that handles BSON serialization. Conversion between `DomainId<T>` and `ObjectId` happens here:
+
+```rust
+// src/infrastructure/persistence/users/model.rs
+#[serde_as]
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct UserDocument {
+    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
+    #[serde_as(as = "Option<IfIsHumanReadable<serde_with::DisplayFromStr>>")]
+    pub id: Option<ObjectId>,    // ← BSON ObjectId here
+    // ...
+}
+
+impl From<User> for UserDocument { /* DomainId → ObjectId */ }
+impl From<UserDocument> for User { /* ObjectId → DomainId */ }
+```
+
+Repositories return typed IDs and accept typed IDs:
+
+```rust
+pub async fn create(&self, user: &User) -> Result<UserId> { /* ... */ }
+pub async fn find_by_id(&self, id: &UserId) -> Result<Option<User>> { /* ... */ }
+```
+
+### Direct Parameters, No Command Structs
+
+Services accept **typed IDs and direct parameters** — no intermediate command structs. This keeps the application layer lean:
+
+```rust
+// src/application/users.rs — NO CreateUser struct
+impl UsersService {
+    // 2 params (≤6) → pass directly
+    pub async fn create_user(&self, name: &str, email: &str) -> Result<User> { /* ... */ }
+
+    // Typed ID ensures you can't pass a ProductId here
+    pub async fn get_user(&self, id: &UserId) -> Result<User> { /* ... */ }
+    pub async fn update_user(&self, id: &UserId, name: &str, email: &str) -> Result<User> { /* ... */ }
+}
+
+// For >6 params, group using an existing domain type:
+impl ProductsService {
+    pub async fn create_product(
+        &self, name: &str, price: f64, stock: i32,
+        metadata: ProductMetadata,  // ← existing domain type groups 4 fields
+    ) -> Result<Product> { /* ... */ }
+}
+```
+
+**Rule**: ≤6 params → pass directly. >6 params → group using an existing domain struct.
+
+### Handlers: Typed IDs at the Boundary
+
+Handlers build typed IDs from raw strings and pass DTO fields directly to services:
+
+```rust
+// src/presentation/http/users/routes.rs
+pub async fn create_user(
+    State(service): State<Arc<UsersService>>,
+    ValidatedJson(input): ValidatedJson<CreateUserInput>,
+) -> Result<GenericApiResponse<UserOutput>, ApiError> {
+    let user = service.create_user(&input.name, &input.email).await?;  // direct params
+    Ok(GenericApiResponse::success(user.into()))
+}
+
+pub async fn get_user(
+    State(service): State<Arc<UsersService>>,
+    Path(id): Path<String>,
+) -> Result<GenericApiResponse<UserOutput>, ApiError> {
+    let user_id = UserId::new(id);                     // String → typed ID at boundary
+    let user = service.get_user(&user_id).await?;
+    Ok(GenericApiResponse::success(user.into()))
+}
+```
+
+**No `From<DTO> for Command`** — there are no command structs. Input DTOs only carry validation.
+
+### Error Handling
+
+Domain errors are **database-agnostic** — `Database(String)`, not `Database(#[from] mongodb::error::Error)`:
+
+```rust
+// Domain: no mongodb dependency
+DomainError::Database(String)
+
+// Infrastructure: explicit conversion in every repo method
+self.collection.find_one(doc! { ... }).await
+    .map_err(|e| Error::database(e.to_string()))?;
+```
+
+### Soft Deletes
+
+All entities have `deleted_at: Option<DateTime<Utc>>`. Repositories:
+
+- **Delete**: `$set: { deleted_at: now }` (never `delete_one`)
+- **Query**: always filter `"deleted_at": { "$exists": false }`
+- **Indexes**: include `deleted_at` as first key in compound indexes
+
+### Pagination
+
+All `find_all()` methods require a `Pagination` parameter:
+
+```rust
+let users = service.list_users(Pagination { page: 1, page_size: 20 }).await?;
+```
+
+### Output DTOs
+
+`DomainId<T>` converts to `String` via `into_inner()` in output DTOs:
+
+```rust
+impl From<User> for UserOutput {
+    fn from(user: User) -> Self {
+        Self {
+            id: user.id.map(|id| id.into_inner()).unwrap_or_default(),
+            // ...
+        }
+    }
+}
+```
+
+## How to Add a New Feature
+
+Example: Adding **Payments**.
+
+### 1. Domain (`src/domain/payments.rs`)
+
+```rust
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+use crate::domain::values;
+use crate::domain::users::UserId;
+
+#[derive(Debug, Clone)]
+pub struct PaymentMarker;
+pub type PaymentId = values::DomainId<PaymentMarker>;
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct Payment {
+    pub id: Option<PaymentId>,     // Typed ID
+    pub user_id: UserId,           // Typed FK
+    pub amount: f64,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+    pub deleted_at: Option<DateTime<Utc>>,
+}
+```
+
+Register in `src/domain/mod.rs`.
+
+### 2. Persistence Model + Repository
+
+```bash
+mkdir -p src/infrastructure/persistence/payments
+```
+
+- `model.rs` — `PaymentDocument` with `ObjectId`, `ChronoAsBson`, `From`/`TryFrom` conversions
+- `repository.rs` — `Collection<PaymentDocument>`, CRUD + indexes + soft delete + pagination
+- `mod.rs` — re-exports
+
+Register in `src/infrastructure/persistence/mod.rs`.
+
+### 3. Service (`src/application/payments.rs`)
+
+```rust
+// NO command structs — 2 params (≤6), pass directly with typed IDs
+
+pub struct PaymentsService { repo: Arc<PaymentsRepository> }
+
+impl PaymentsService {
+    pub async fn create_payment(
+        &self,
+        user_id: &UserId,   // typed ID, not &str
+        amount: f64,
+    ) -> Result<Payment> {
+        // Business rules, then persist
+    }
+}
+```
+
+Register in `src/application/mod.rs`.
+
+### 4. API Layer
+
+```bash
+mkdir -p src/presentation/http/payments/dtos
+```
+
+- `dtos/input.rs` — `CreatePaymentInput` (validation only, no `From` → command)
+- `dtos/output.rs` — `PaymentOutput` + `impl From<Payment> for PaymentOutput` (uses `id.into_inner()`)
+- `routes.rs` — handlers build `UserId::new(req.user_id)`, call `service.create_payment(&user_id, req.amount)`
+
+Register in `src/presentation/http/mod.rs`.
+
+### 5. Wire Everything
+
+In `src/main.rs`:
+
+```rust
+let payments_repo = Arc::new(PaymentsRepository::new(&db));
+payments_repo.create_indexes().await?;
+let payments_service = Arc::new(PaymentsService::new(payments_repo));
+```
+
+In `src/presentation/state.rs` — add to `AppState` + `impl FromRef`.
+
+In `src/presentation/http/mod.rs`:
+
+```rust
+.nest("/payments", payments::routes::router())
+```
+
+In `src/presentation/openapi.rs` — add paths + schemas.
 
 ## Prerequisites
-
-Install the following:
 
 ```bash
 cargo install sccache
 ```
 
-## Architecture
+## Running
 
-The project is organized into layers to separate concerns:
-
-```text
-      Request
-         |
-         v
-+------------------+
-|   Presentation   |  <-- Decodes requests, Validates input, Maps Output DTOs
-+--------+---------+
-         | Calls Service
-         v
-+--------+---------+      +----------------+
-|   Application    |----->|     Domain     |
-| (Business Logic) |      |    (Entities)  |
-+--------+---------+      +-------^--------+
-         | Calls Repo             |
-         v                        |
-+--------+---------+              |
-|  Infrastructure  |--------------+
-|   (Persistence)  |  Returns Entities
-+------------------+
+```bash
+cp .env.example .env   # Configure environment variables
+cargo run
 ```
 
-## Folder Structure
+### Required Environment Variables
 
-Here is where everything is located:
+| Variable       | Required | Default                  | Description                       |
+| -------------- | -------- | ------------------------ | --------------------------------- |
+| `SERVICE_NAME` | ✅       | —                        | Service identifier                |
+| `PROJECT_ID`   | ✅       | —                        | GCP project ID                    |
+| `MONGO_URL`    | ✅       | —                        | MongoDB connection string         |
+| `MONGO_DB`     | ✅       | —                        | Database name                     |
+| `PORT`         | ❌       | `3000`                   | HTTP listen port                  |
+| `APP_ENV`      | ❌       | `DEV`                    | Environment (`DEV`, `STG`, `PRD`) |
+| `REDIS_URL`    | ❌       | `redis://127.0.0.1:6379` | Redis connection string           |
+| `DEBUG_LEVEL`  | ❌       | `info`                   | Log level                         |
+| `CORS_ORIGINS` | ❌       | `*`                      | Comma-separated CORS origins      |
 
-```text
-src/
-├── domain/               # Core business entities and logic (No external dependencies)
-│   ├── users.rs
-│   ├── products.rs
-│   └── error.rs
-├── application/          # Business logic and coordination (Services)
-│   ├── users.rs
-│   └── products.rs
-├── infrastructure/       # Database access and external tools
-│   ├── persistence/      # Repositories (Database operations)
-│   │   ├── users.rs
-│   │   └── mongo.rs
-│   └── providers/        # External services (Redis, etc.)
-├── presentation/         # API Layer
-│   ├── http/
-│   │   ├── users/        # Routes and DTOs (Input/Output)
-│   │   ├── validation.rs # Input validation
-│   │   └── response.rs   # API responses
-│   ├── server.rs         # Server configuration
-│   ├── state.rs          # Dependency Injection setup
-│   └── openapi.rs        # API Documentation setup
-├── config.rs             # Configuration loading
-└── main.rs               # Application entry point
+## API Documentation
+
+Swagger UI available at: **`http://localhost:3000/swagger-ui`** (disabled in `PRD` environment).
+
+## Deployment
+
+The project includes a Cloud Build pipeline (`build/cloudbuild.yaml`) that builds a distroless Docker image and deploys to **Google Cloud Run**.
+
+```bash
+# Manual Docker build
+docker build -f build/Dockerfile -t service .
 ```
-
-## How to Add a New Feature
-
-Example: Adding a **Payments** feature.
-
-### 1. Domain Layer (`src/domain/payments.rs`)
-
-Define the data structure.
-
-```rust
-#[derive(Debug, Serialize, Deserialize, Clone)]
-pub struct Payment {
-    #[serde(rename = "_id", skip_serializing_if = "Option::is_none")]
-    pub id: Option<bson::oid::ObjectId>,
-    pub amount: f64,
-}
-```
-
-### 2. Infrastructure Layer (`src/infrastructure/persistence/payments.rs`)
-
-Create the repository to handle database operations.
-
-```rust
-pub struct PaymentRepository { collection: Collection<Payment> }
-
-impl PaymentRepository {
-    #[tracing::instrument(skip_all)]
-    pub async fn create(&self, p: &Payment) -> Result<ObjectId> {
-        let res = self.collection.insert_one(p).await?;
-        Ok(res.inserted_id.as_object_id().unwrap_or_default())
-    }
-}
-```
-
-### 3. Application Layer (`src/application/payments.rs`)
-
-Create the service to handle business logic.
-
-```rust
-pub struct PaymentService { repo: Arc<PaymentRepository> }
-
-impl PaymentService {
-    #[tracing::instrument(skip_all)]
-    pub async fn create(&self, dto: CreatePaymentDto) -> Result<Payment, Error> {
-        let mut payment = Payment {
-            id: None,
-            amount: dto.amount,
-        };
-        let id = self.repo.create(&payment).await?;
-        payment.id = Some(id);
-        Ok(payment)
-    }
-}
-```
-
-### 4. Presentation Layer (`src/presentation/http/payments/`)
-
-Define input/output data (`dtos.rs`) and API routes (`routes.rs`).
-
-```rust
-// dtos.rs
-#[derive(Serialize, ToSchema)]
-pub struct PaymentResponse {
-    pub id: ObjectId,
-    pub amount: f64,
-}
-
-impl From<Payment> for PaymentResponse {
-    fn from(p: Payment) -> Self {
-        Self { id: p.id.expect("ID must exist"), amount: p.amount }
-    }
-}
-
-// routes.rs
-#[utoipa::path(...)]
-#[tracing::instrument(skip_all)]
-pub async fn create_payment(
-    State(service): State<Arc<PaymentService>>,
-    ValidatedJson(req): ValidatedJson<CreatePaymentDto>
-) -> Result<Json<PaymentResponse>, ApiError> {
-    let payment = service.create(req).await?;
-    // Never expose Domain entity directly
-    Ok(Json(PaymentResponse::from(payment)))
-}
-```
-
-### 5. Register Components
-
-1.  Initialize Repository and Service in `src/main.rs`.
-2.  Add the Service to `AppState` in `src/presentation/state.rs`.
-3.  Register the new routes in `src/presentation/http/mod.rs`.
-
-## Running the Project
-
-1.  Copy the environment file:
-    ```bash
-    cp .env.example .env
-    ```
-2.  Run the application:
-    ```bash
-    cargo run
-    ```
-
-You can view the API documentation at: **`http://localhost:3000/swagger-ui`**

@@ -1,8 +1,7 @@
-use crate::domain::error::{Error, Result};
-use crate::{
-    domain::users::User, infrastructure::persistence::users::UsersRepository,
-    presentation::http::users::dtos::CreateUserInput,
-};
+use crate::domain::error::{DomainResult, Error};
+use crate::domain::users::{User, UserId};
+use crate::infrastructure::persistence::Pagination;
+use crate::infrastructure::persistence::users::UsersRepository;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -15,44 +14,75 @@ impl UsersService {
         Self { repo }
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn create_user(&self, dto: CreateUserInput) -> Result<User> {
-        if self.repo.find_by_email(&dto.email).await?.is_some() {
-            return Err(Error::duplicate("User", "email", &dto.email));
+    #[tracing::instrument(skip_all, fields(%email))]
+    pub async fn create_user(&self, name: &str, email: &str) -> DomainResult<User> {
+        if self.repo.find_by_email(email).await?.is_some() {
+            return Err(Error::duplicate("User", "email", email));
         }
 
+        let now = chrono::Utc::now();
         let mut user = User {
             id: None,
-            name: dto.name,
-            email: dto.email,
-            created_at: chrono::Utc::now(),
-            updated_at: chrono::Utc::now(),
+            name: name.to_string(),
+            email: email.to_string(),
+            created_at: now,
+            updated_at: now,
+            deleted_at: None,
         };
 
         let id = self.repo.create(&user).await?;
         user.id = Some(id);
+
+        tracing::info!(user_id = %user.id.as_deref().unwrap_or("unknown"), "User created");
+        Ok(user)
+    }
+
+    #[tracing::instrument(skip_all, fields(%id))]
+    pub async fn get_user(&self, id: &UserId) -> DomainResult<User> {
+        self.repo
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| Error::not_found("User", id.to_string()))
+    }
+
+    #[tracing::instrument(skip_all)]
+    pub async fn list_users(&self, pagination: Pagination) -> DomainResult<Vec<User>> {
+        self.repo.find_all(pagination).await
+    }
+
+    #[tracing::instrument(skip_all, fields(%id, %email))]
+    pub async fn update_user(&self, id: &UserId, name: &str, email: &str) -> DomainResult<User> {
+        let mut user = self.get_user(id).await?;
+
+        // Business rule: cannot change email to one already in use
+        if email != user.email {
+            if self.repo.find_by_email(email).await?.is_some() {
+                return Err(Error::duplicate("User", "email", email));
+            }
+        }
+
+        user.name = name.to_string();
+        user.email = email.to_string();
+        user.updated_at = chrono::Utc::now();
+
+        self.repo.update(id, &user).await?;
+
+        tracing::info!("User updated");
         Ok(user)
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn get_user(&self, id: &str) -> Result<User> {
-        self.repo
-            .find_by_id(id)
-            .await?
-            .ok_or_else(|| Error::not_found("User", id))
+    pub async fn count_users(&self) -> DomainResult<u64> {
+        self.repo.count().await
     }
 
-    #[tracing::instrument(skip_all)]
-    pub async fn list_users(&self) -> Result<Vec<User>> {
-        Ok(self.repo.find_all().await?)
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub async fn delete_user(&self, id: &str) -> Result<()> {
+    #[tracing::instrument(skip_all, fields(%id))]
+    pub async fn delete_user(&self, id: &UserId) -> DomainResult<()> {
         let deleted = self.repo.delete(id).await?;
         if !deleted {
-            return Err(Error::not_found("User", id));
+            return Err(Error::not_found("User", id.to_string()));
         }
+        tracing::info!("User soft-deleted");
         Ok(())
     }
 }

@@ -30,7 +30,7 @@ pub enum DomainError {
     ExternalService { service: String, message: String },
 
     #[error("Database error: {0}")]
-    Database(#[from] mongodb::error::Error),
+    Database(String),
 
     #[error("Internal error: {0}")]
     Internal(String),
@@ -144,6 +144,10 @@ impl DomainError {
         Self::Internal(message.into())
     }
 
+    pub fn database(message: impl Into<String>) -> Self {
+        Self::Database(message.into())
+    }
+
     // ===== Servicios externos =====
 
     pub fn external(service: impl Into<String>, message: impl Into<String>) -> Self {
@@ -178,4 +182,4 @@ impl DomainError {
 pub type Error = DomainError;
 
 // Alias para Result con nuestro error
-pub type Result<T> = std::result::Result<T, DomainError>;
+pub type DomainResult<T> = std::result::Result<T, DomainError>;
