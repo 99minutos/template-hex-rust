@@ -1,8 +1,8 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
-use crate::domain::products::ProductId;
-use crate::domain::users::UserId;
+use crate::domain::product::ProductId;
+use crate::domain::user::UserId;
 use crate::domain::values;
 
 #[derive(Debug, Clone)]

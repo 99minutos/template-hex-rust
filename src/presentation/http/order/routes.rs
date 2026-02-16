@@ -1,12 +1,12 @@
-use crate::application::orders::OrdersService;
-use crate::domain::orders::OrderId;
-use crate::domain::products::ProductId;
-use crate::domain::users::UserId;
-use crate::infrastructure::persistence::Pagination;
+use crate::application::order::OrderService;
+use crate::domain::order::OrderId;
+use crate::domain::pagination::Pagination;
+use crate::domain::product::ProductId;
+use crate::domain::user::UserId;
 use crate::presentation::{
     http::{
         error::ApiError,
-        orders::dtos::{CreateOrderInput, OrderOutput},
+        order::dtos::{CreateOrderInput, OrderOutput},
         response::GenericApiResponse,
         validation::ValidatedJson,
     },
@@ -48,7 +48,7 @@ pub fn router() -> Router<AppState> {
 )]
 #[tracing::instrument(skip_all)]
 pub async fn create_order(
-    State(service): State<Arc<OrdersService>>,
+    State(service): State<Arc<OrderService>>,
     ValidatedJson(req): ValidatedJson<CreateOrderInput>,
 ) -> Result<GenericApiResponse<OrderOutput>, ApiError> {
     let user_id = UserId::new(req.user_id);
@@ -69,7 +69,7 @@ pub async fn create_order(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn get_order(
-    State(service): State<Arc<OrdersService>>,
+    State(service): State<Arc<OrderService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<OrderOutput>, ApiError> {
     let order_id = OrderId::new(id);
@@ -88,7 +88,7 @@ pub async fn get_order(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn list_orders(
-    State(service): State<Arc<OrdersService>>,
+    State(service): State<Arc<OrderService>>,
     Query(query): Query<OrderQuery>,
 ) -> Result<GenericApiResponse<Vec<OrderOutput>>, ApiError> {
     let pagination = Pagination {

@@ -2,15 +2,15 @@ use crate::presentation::state::AppState;
 use axum::Router;
 
 pub mod error;
-pub mod orders;
-pub mod products;
+pub mod order;
+pub mod product;
 pub mod response;
-pub mod users;
+pub mod user;
 pub mod validation;
 
 pub fn app_router() -> Router<AppState> {
     Router::new()
-        .nest("/users", users::routes::router())
-        .nest("/products", products::routes::router())
-        .nest("/orders", orders::routes::router())
+        .nest("/users", user::routes::router())
+        .nest("/products", product::routes::router())
+        .nest("/orders", order::routes::router())
 }

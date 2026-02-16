@@ -1,55 +1,44 @@
-use crate::presentation::http::response::GenericApiResponse;
-use crate::presentation::http::{orders, products, users};
+use crate::domain::product::{ProductMetadata, ProductStatus};
+use crate::presentation::http::error::ApiError;
+use crate::presentation::http::{order, product, user};
 use utoipa::OpenApi;
 
 #[derive(OpenApi)]
 #[openapi(
-    info(
-        title = "Rust Microservice Template API",
-        version = "0.1.0",
-        description = "Clean Architecture Template.\n\nFlow:\n1. Create User -> Get ID\n2. Create Product -> Get ID\n3. Create Order (requires UserID + ProductID)"
-    ),
     paths(
-        // Users
-        users::routes::create_user,
-        users::routes::get_user,
-        users::routes::list_users,
-        users::routes::delete_user,
+        user::routes::create_user,
+        user::routes::get_user,
+        user::routes::list_users,
+        user::routes::delete_user,
         // Products
-        products::routes::create_product,
-        products::routes::get_product,
-        products::routes::list_products,
-        products::routes::update_metadata,
-        products::routes::delete_product,
+        product::routes::create_product,
+        product::routes::get_product,
+        product::routes::list_products,
+        product::routes::update_metadata,
+        product::routes::delete_product,
         // Orders
-        orders::routes::create_order,
-        orders::routes::get_order,
-        orders::routes::list_orders,
+        order::routes::create_order,
+        order::routes::get_order,
+        order::routes::list_orders,
     ),
     components(
         schemas(
-            // Users
-            users::dtos::CreateUserInput,
-            users::dtos::UserOutput,
-            // Products
-            products::dtos::CreateProductInput,
-            products::dtos::UpdateProductMetadataInput,
-            products::dtos::ProductOutput,
-            crate::domain::products::ProductStatus,
-            crate::domain::products::ProductMetadata,
-            // Orders
-            orders::dtos::CreateOrderInput,
-            orders::dtos::OrderOutput,
-            // Response Wrapper
-            GenericApiResponse<users::dtos::UserOutput>,
-            GenericApiResponse<products::dtos::ProductOutput>,
-            GenericApiResponse<orders::dtos::OrderOutput>
+            user::dtos::CreateUserInput,
+            user::dtos::UserOutput,
+            product::dtos::CreateProductInput,
+            product::dtos::ProductOutput,
+            product::dtos::UpdateProductMetadataInput,
+            order::dtos::CreateOrderInput,
+            order::dtos::OrderOutput,
+            ApiError,
+            ProductStatus,
+            ProductMetadata,
         )
     ),
     tags(
-        (name = "Users", description = "User management"),
-        (name = "Products", description = "Product management"),
-        (name = "Orders", description = "Order processing")
+        (name = "Users", description = "User management endpoints"),
+        (name = "Products", description = "Product management endpoints"),
+        (name = "Orders", description = "Order management endpoints")
     )
 )]
 pub struct ApiDoc;

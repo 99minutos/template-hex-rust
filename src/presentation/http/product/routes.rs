@@ -1,10 +1,10 @@
-use crate::application::products::ProductsService;
-use crate::domain::products::{ProductId, ProductMetadata};
-use crate::infrastructure::persistence::Pagination;
+use crate::application::product::ProductService;
+use crate::domain::pagination::Pagination;
+use crate::domain::product::{ProductId, ProductMetadata};
 use crate::presentation::{
     http::{
         error::ApiError,
-        products::dtos::{CreateProductInput, ProductOutput, UpdateProductMetadataInput},
+        product::dtos::{CreateProductInput, ProductOutput, UpdateProductMetadataInput},
         response::GenericApiResponse,
         validation::ValidatedJson,
     },
@@ -47,7 +47,7 @@ pub fn router() -> Router<AppState> {
 )]
 #[tracing::instrument(skip_all)]
 pub async fn create_product(
-    State(service): State<Arc<ProductsService>>,
+    State(service): State<Arc<ProductService>>,
     ValidatedJson(req): ValidatedJson<CreateProductInput>,
 ) -> Result<GenericApiResponse<ProductOutput>, ApiError> {
     let metadata = ProductMetadata {
@@ -73,7 +73,7 @@ pub async fn create_product(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn get_product(
-    State(service): State<Arc<ProductsService>>,
+    State(service): State<Arc<ProductService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<ProductOutput>, ApiError> {
     let product_id = ProductId::new(id);
@@ -92,7 +92,7 @@ pub async fn get_product(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn list_products(
-    State(service): State<Arc<ProductsService>>,
+    State(service): State<Arc<ProductService>>,
     Query(query): Query<ProductQuery>,
 ) -> Result<GenericApiResponse<Vec<ProductOutput>>, ApiError> {
     let pagination = Pagination {
@@ -116,7 +116,7 @@ pub async fn list_products(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn update_metadata(
-    State(service): State<Arc<ProductsService>>,
+    State(service): State<Arc<ProductService>>,
     Path(id): Path<String>,
     ValidatedJson(req): ValidatedJson<UpdateProductMetadataInput>,
 ) -> Result<GenericApiResponse<ProductOutput>, ApiError> {
@@ -142,7 +142,7 @@ pub async fn update_metadata(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn delete_product(
-    State(service): State<Arc<ProductsService>>,
+    State(service): State<Arc<ProductService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<()>, ApiError> {
     let product_id = ProductId::new(id);

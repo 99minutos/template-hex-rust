@@ -1,22 +1,23 @@
 use crate::domain::error::{DomainResult, Error};
-use crate::domain::users::{User, UserId};
-use crate::infrastructure::persistence::Pagination;
-use crate::infrastructure::persistence::users::UsersRepository;
+use crate::domain::pagination::Pagination;
+use crate::domain::ports::user::UserRepositoryPort;
+use crate::domain::user::{User, UserId};
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct UsersService {
-    repo: Arc<UsersRepository>,
+pub struct UserService {
+    repo: Arc<dyn UserRepositoryPort>,
 }
 
-impl UsersService {
-    pub fn new(repo: Arc<UsersRepository>) -> Self {
+impl UserService {
+    pub fn new(repo: Arc<dyn UserRepositoryPort>) -> Self {
         Self { repo }
     }
 
     #[tracing::instrument(skip_all, fields(%email))]
     pub async fn create_user(&self, name: &str, email: &str) -> DomainResult<User> {
-        if self.repo.find_by_email(email).await?.is_some() {
+        let existing: Option<User> = self.repo.find_by_email(email).await?;
+        if existing.is_some() {
             return Err(Error::duplicate("User", "email", email));
         }
 
@@ -39,10 +40,8 @@ impl UsersService {
 
     #[tracing::instrument(skip_all, fields(%id))]
     pub async fn get_user(&self, id: &UserId) -> DomainResult<User> {
-        self.repo
-            .find_by_id(id)
-            .await?
-            .ok_or_else(|| Error::not_found("User", id.to_string()))
+        let user: Option<User> = self.repo.find_by_id(id).await?;
+        user.ok_or_else(|| Error::not_found("User", id.to_string()))
     }
 
     #[tracing::instrument(skip_all)]
@@ -56,7 +55,8 @@ impl UsersService {
 
         // Business rule: cannot change email to one already in use
         if email != user.email {
-            if self.repo.find_by_email(email).await?.is_some() {
+            let existing: Option<User> = self.repo.find_by_email(email).await?;
+            if existing.is_some() {
                 return Err(Error::duplicate("User", "email", email));
             }
         }

@@ -1,30 +1,30 @@
 use crate::domain::error::{DomainResult, Error};
-use crate::domain::orders::{Order, OrderId};
-use crate::domain::products::ProductId;
-use crate::domain::users::UserId;
-use crate::infrastructure::persistence::Pagination;
-use crate::infrastructure::persistence::orders::OrdersRepository;
-use crate::infrastructure::persistence::products::ProductsRepository;
-use crate::infrastructure::persistence::users::UsersRepository;
+use crate::domain::order::{Order, OrderId};
+use crate::domain::pagination::Pagination;
+use crate::domain::ports::order::OrderRepositoryPort;
+use crate::domain::ports::product::ProductRepositoryPort;
+use crate::domain::ports::user::UserRepositoryPort;
+use crate::domain::product::ProductId;
+use crate::domain::user::UserId;
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct OrdersService {
-    orders_repo: Arc<OrdersRepository>,
-    users_repo: Arc<UsersRepository>,
-    products_repo: Arc<ProductsRepository>,
+pub struct OrderService {
+    order_repo: Arc<dyn OrderRepositoryPort>,
+    user_repo: Arc<dyn UserRepositoryPort>,
+    product_repo: Arc<dyn ProductRepositoryPort>,
 }
 
-impl OrdersService {
+impl OrderService {
     pub fn new(
-        orders_repo: Arc<OrdersRepository>,
-        users_repo: Arc<UsersRepository>,
-        products_repo: Arc<ProductsRepository>,
+        order_repo: Arc<dyn OrderRepositoryPort>,
+        user_repo: Arc<dyn UserRepositoryPort>,
+        product_repo: Arc<dyn ProductRepositoryPort>,
     ) -> Self {
         Self {
-            orders_repo,
-            users_repo,
-            products_repo,
+            order_repo,
+            user_repo,
+            product_repo,
         }
     }
 
@@ -36,13 +36,15 @@ impl OrdersService {
         quantity: i32,
     ) -> DomainResult<Order> {
         // 1. Validate user exists
-        if self.users_repo.find_by_id(user_id).await?.is_none() {
+        let user_opt: Option<crate::domain::user::User> =
+            self.user_repo.find_by_id(user_id).await?;
+        if user_opt.is_none() {
             return Err(Error::not_found("User", user_id.to_string()));
         }
 
         // 2. Validate product exists and get price
         let product = self
-            .products_repo
+            .product_repo
             .find_by_id(product_id)
             .await?
             .ok_or_else(|| Error::not_found("Product", product_id.to_string()))?;
@@ -64,7 +66,7 @@ impl OrdersService {
             .as_ref()
             .ok_or_else(|| Error::internal("Product missing ID"))?;
 
-        let stock_updated = self.products_repo.update_stock(pid, -quantity).await?;
+        let stock_updated = self.product_repo.update_stock(pid, -quantity).await?;
 
         if !stock_updated {
             return Err(Error::business_rule(
@@ -85,7 +87,7 @@ impl OrdersService {
             deleted_at: None,
         };
 
-        let id = self.orders_repo.create(&order).await?;
+        let id = self.order_repo.create(&order).await?;
         order.id = Some(id);
 
         tracing::info!(
@@ -98,7 +100,7 @@ impl OrdersService {
 
     #[tracing::instrument(skip_all, fields(%id))]
     pub async fn get_order(&self, id: &OrderId) -> DomainResult<Order> {
-        self.orders_repo
+        self.order_repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| Error::not_found("Order", id.to_string()))
@@ -106,7 +108,7 @@ impl OrdersService {
 
     #[tracing::instrument(skip_all)]
     pub async fn list_orders(&self, pagination: Pagination) -> DomainResult<Vec<Order>> {
-        self.orders_repo.find_all(pagination).await
+        self.order_repo.find_all(pagination).await
     }
 
     #[tracing::instrument(skip_all, fields(%user_id))]
@@ -116,10 +118,12 @@ impl OrdersService {
         pagination: Pagination,
     ) -> DomainResult<Vec<Order>> {
         // Validate user exists
-        if self.users_repo.find_by_id(user_id).await?.is_none() {
+        let user_opt: Option<crate::domain::user::User> =
+            self.user_repo.find_by_id(user_id).await?;
+        if user_opt.is_none() {
             return Err(Error::not_found("User", user_id.to_string()));
         }
 
-        self.orders_repo.find_by_user_id(user_id, pagination).await
+        self.order_repo.find_by_user_id(user_id, pagination).await
     }
 }

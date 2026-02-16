@@ -1,4 +1,4 @@
-use crate::domain::users::User;
+use crate::domain::user::{User, UserId};
 use serde::Serialize;
 use utoipa::ToSchema;
 
@@ -14,7 +14,10 @@ pub struct UserOutput {
 impl From<User> for UserOutput {
     fn from(user: User) -> Self {
         Self {
-            id: user.id.map(|id| id.into_inner()).unwrap_or_default(),
+            id: user
+                .id
+                .map(|id: UserId| id.into_inner())
+                .unwrap_or_default(),
             name: user.name,
             email: user.email,
             created_at: user.created_at.to_rfc3339(),

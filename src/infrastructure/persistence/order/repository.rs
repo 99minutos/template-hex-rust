@@ -1,8 +1,10 @@
-use crate::domain::error::{Error, DomainResult};
-use crate::domain::orders::{Order, OrderId};
-use crate::domain::users::UserId;
-use crate::infrastructure::persistence::Pagination;
-use crate::infrastructure::persistence::orders::model::OrderDocument;
+use crate::domain::error::{DomainResult, Error};
+use crate::domain::order::{Order, OrderId};
+use crate::domain::pagination::Pagination;
+use crate::domain::ports::order::OrderRepositoryPort;
+use crate::domain::user::UserId;
+use crate::infrastructure::persistence::order::model::OrderDocument;
+use async_trait::async_trait;
 use futures::stream::TryStreamExt;
 use mongodb::{
     Collection, Database, IndexModel,
@@ -11,11 +13,11 @@ use mongodb::{
 };
 
 #[derive(Clone)]
-pub struct OrdersRepository {
+pub struct OrderRepository {
     collection: Collection<OrderDocument>,
 }
 
-impl OrdersRepository {
+impl OrderRepository {
     pub fn new(db: &Database) -> Self {
         Self {
             collection: db.collection("orders"),
@@ -26,34 +28,18 @@ impl OrdersRepository {
     pub async fn create_indexes(&self) -> DomainResult<()> {
         let indexes = vec![
             IndexModel::builder()
-                .keys(doc! { "deleted_at": 1, "user_id": 1, "created_at": -1 })
+                .keys(doc! { "user_id": 1, "created_at": -1 })
                 .options(
                     IndexOptions::builder()
-                        .name("deleted_user_created_compound_idx".to_string())
+                        .name("user_created_compound_idx".to_string())
                         .build(),
                 )
                 .build(),
             IndexModel::builder()
-                .keys(doc! { "deleted_at": 1, "product_id": 1, "created_at": -1 })
+                .keys(doc! { "product_id": 1 })
                 .options(
                     IndexOptions::builder()
-                        .name("deleted_product_created_compound_idx".to_string())
-                        .build(),
-                )
-                .build(),
-            IndexModel::builder()
-                .keys(doc! { "deleted_at": 1, "created_at": -1 })
-                .options(
-                    IndexOptions::builder()
-                        .name("deleted_created_compound_idx".to_string())
-                        .build(),
-                )
-                .build(),
-            IndexModel::builder()
-                .keys(doc! { "deleted_at": 1, "total_price": -1 })
-                .options(
-                    IndexOptions::builder()
-                        .name("deleted_price_compound_idx".to_string())
+                        .name("product_idx".to_string())
                         .build(),
                 )
                 .build(),
@@ -67,12 +53,15 @@ impl OrdersRepository {
         tracing::info!("✓ Orders indexes created");
         Ok(())
     }
+}
 
+#[async_trait]
+impl OrderRepositoryPort for OrderRepository {
     // ===== CREATE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn create(&self, order: &Order) -> DomainResult<OrderId> {
-        let doc = OrderDocument::try_from(order.clone())?;
+    async fn create(&self, order: &Order) -> DomainResult<OrderId> {
+        let doc = OrderDocument::try_from(order.clone()).map_err(Error::internal)?;
 
         let result = self
             .collection
@@ -90,7 +79,7 @@ impl OrdersRepository {
     // ===== READ =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_id(&self, id: &OrderId) -> DomainResult<Option<Order>> {
+    async fn find_by_id(&self, id: &OrderId) -> DomainResult<Option<Order>> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Order", &**id))?;
 
@@ -104,12 +93,12 @@ impl OrdersRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_all(&self, pagination: Pagination) -> DomainResult<Vec<Order>> {
+    async fn find_all(&self, pagination: Pagination) -> DomainResult<Vec<Order>> {
         let cursor = self
             .collection
             .find(doc! { "deleted_at": { "$exists": false } })
-            .skip(pagination.skip())
-            .limit(pagination.limit_i64())
+            .skip(pagination.get_skip())
+            .limit(pagination.get_limit())
             .sort(doc! { "created_at": -1 })
             .await
             .map_err(|e| Error::database(e.to_string()))?;
@@ -123,13 +112,13 @@ impl OrdersRepository {
     }
 
     #[tracing::instrument(skip_all)]
-    pub async fn find_by_user_id(
+    async fn find_by_user_id(
         &self,
         user_id: &UserId,
         pagination: Pagination,
     ) -> DomainResult<Vec<Order>> {
         let oid = ObjectId::parse_str(&**user_id)
-            .map_err(|_| Error::invalid_param("user_id", "User", &**user_id))?;
+            .map_err(|_| Error::invalid_param("user_id", "Order", &**user_id))?;
 
         let cursor = self
             .collection
@@ -137,8 +126,8 @@ impl OrdersRepository {
                 "user_id": oid,
                 "deleted_at": { "$exists": false }
             })
-            .skip(pagination.skip())
-            .limit(pagination.limit_i64())
+            .skip(pagination.get_skip())
+            .limit(pagination.get_limit())
             .sort(doc! { "created_at": -1 })
             .await
             .map_err(|e| Error::database(e.to_string()))?;
@@ -151,10 +140,10 @@ impl OrdersRepository {
         Ok(docs.into_iter().map(Order::from).collect())
     }
 
-    // ===== SOFT DELETE =====
+    // ===== DELETE =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn delete(&self, id: &OrderId) -> DomainResult<bool> {
+    async fn delete(&self, id: &OrderId) -> DomainResult<bool> {
         let oid =
             ObjectId::parse_str(&**id).map_err(|_| Error::invalid_param("id", "Order", &**id))?;
 
@@ -175,7 +164,7 @@ impl OrdersRepository {
     // ===== COUNT =====
 
     #[tracing::instrument(skip_all)]
-    pub async fn count(&self) -> DomainResult<u64> {
+    async fn count(&self) -> DomainResult<u64> {
         self.collection
             .count_documents(doc! { "deleted_at": { "$exists": false } })
             .await

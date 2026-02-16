@@ -11,9 +11,13 @@ use crate::presentation::server::ServerLauncher;
 use crate::presentation::state::AppState;
 use std::sync::Arc;
 
-use crate::application::{orders::OrdersService, products::ProductsService, users::UsersService};
+use crate::application::{order::OrderService, product::ProductService, user::UserService};
+use crate::domain::ports::{
+    order::OrderRepositoryPort, product::ProductRepositoryPort, user::UserRepositoryPort,
+};
 use crate::infrastructure::persistence::{
-    orders::OrdersRepository, products::ProductsRepository, users::UsersRepository,
+    order::repository::OrderRepository, product::repository::ProductRepository,
+    user::repository::UserRepository,
 };
 
 #[tokio::main]
@@ -35,32 +39,40 @@ async fn main() {
     let db = mongo.get_database();
 
     // 1. Initialize Repositories
-    let users_repo = Arc::new(UsersRepository::new(&db));
-    let products_repo = Arc::new(ProductsRepository::new(&db));
-    let orders_repo = Arc::new(OrdersRepository::new(&db));
+    let user_repo = Arc::new(UserRepository::new(&db));
+    let product_repo = Arc::new(ProductRepository::new(&db));
+    let order_repo = Arc::new(OrderRepository::new(&db));
 
     // 2. Create database indexes (idempotent - safe to run on every startup)
     tracing::info!("Creating database indexes...");
-    if let Err(e) = users_repo.create_indexes().await {
-        tracing::error!("Failed to create users indexes: {}", e);
+    if let Err(e) = user_repo.create_indexes().await {
+        tracing::error!("Failed to create user indexes: {}", e);
     }
-    if let Err(e) = products_repo.create_indexes().await {
-        tracing::error!("Failed to create products indexes: {}", e);
+    if let Err(e) = product_repo.create_indexes().await {
+        tracing::error!("Failed to create product indexes: {}", e);
     }
-    if let Err(e) = orders_repo.create_indexes().await {
-        tracing::error!("Failed to create orders indexes: {}", e);
+    if let Err(e) = order_repo.create_indexes().await {
+        tracing::error!("Failed to create order indexes: {}", e);
     }
 
     // 3. Initialize Services
-    let users_service = Arc::new(UsersService::new(users_repo.clone()));
-    let products_service = Arc::new(ProductsService::new(products_repo.clone()));
-    let orders_service = Arc::new(OrdersService::new(orders_repo, users_repo, products_repo));
+    let user_service = Arc::new(UserService::new(
+        user_repo.clone() as Arc<dyn UserRepositoryPort>
+    ));
+    let product_service = Arc::new(ProductService::new(
+        product_repo.clone() as Arc<dyn ProductRepositoryPort>
+    ));
+    let order_service = Arc::new(OrderService::new(
+        order_repo as Arc<dyn OrderRepositoryPort>,
+        user_repo as Arc<dyn UserRepositoryPort>,
+        product_repo as Arc<dyn ProductRepositoryPort>,
+    ));
 
     // 4. Wire State
     let state = AppState {
-        users_service,
-        products_service,
-        orders_service,
+        user_service,
+        product_service,
+        order_service,
     };
 
     ServerLauncher::new(state).with_http(env.port).run().await;

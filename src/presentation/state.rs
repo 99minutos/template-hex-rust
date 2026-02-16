@@ -1,28 +1,28 @@
-use crate::application::{orders::OrdersService, products::ProductsService, users::UsersService};
+use crate::application::{order::OrderService, product::ProductService, user::UserService};
 use axum::extract::FromRef;
 use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub users_service: Arc<UsersService>,
-    pub products_service: Arc<ProductsService>,
-    pub orders_service: Arc<OrdersService>,
+    pub user_service: Arc<UserService>,
+    pub product_service: Arc<ProductService>,
+    pub order_service: Arc<OrderService>,
 }
 
-impl FromRef<AppState> for Arc<UsersService> {
+impl FromRef<AppState> for Arc<UserService> {
     fn from_ref(state: &AppState) -> Self {
-        state.users_service.clone()
+        state.user_service.clone()
     }
 }
 
-impl FromRef<AppState> for Arc<ProductsService> {
+impl FromRef<AppState> for Arc<ProductService> {
     fn from_ref(state: &AppState) -> Self {
-        state.products_service.clone()
+        state.product_service.clone()
     }
 }
 
-impl FromRef<AppState> for Arc<OrdersService> {
+impl FromRef<AppState> for Arc<OrderService> {
     fn from_ref(state: &AppState) -> Self {
-        state.orders_service.clone()
+        state.order_service.clone()
     }
 }

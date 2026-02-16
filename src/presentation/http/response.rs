@@ -16,17 +16,6 @@ pub struct GenericPagination<T> {
     pub limit: u32,
 }
 
-impl<T> GenericPagination<T> {
-    pub fn new(data: Vec<T>, total: u64, page: u32, limit: u32) -> Self {
-        Self {
-            data,
-            total,
-            page,
-            limit,
-        }
-    }
-}
-
 #[derive(Debug, Serialize, ToSchema)]
 pub struct GenericApiResponse<T> {
     #[schema(example = "0af7651916cd43dd8448eb211c80319c")]

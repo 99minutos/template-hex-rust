@@ -1,11 +1,11 @@
-use crate::application::users::UsersService;
-use crate::domain::users::UserId;
-use crate::infrastructure::persistence::Pagination;
+use crate::application::user::UserService;
+use crate::domain::pagination::Pagination;
+use crate::domain::user::{User, UserId};
 use crate::presentation::{
     http::{
         error::ApiError,
         response::{GenericApiResponse, GenericPagination},
-        users::dtos::{CreateUserInput, UserOutput},
+        user::dtos::{CreateUserInput, UserOutput},
         validation::ValidatedJson,
     },
     state::AppState,
@@ -46,10 +46,10 @@ pub fn router() -> Router<AppState> {
 )]
 #[tracing::instrument(skip_all)]
 pub async fn create_user(
-    State(service): State<Arc<UsersService>>,
+    State(service): State<Arc<UserService>>,
     ValidatedJson(req): ValidatedJson<CreateUserInput>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
-    let user = service.create_user(&req.name, &req.email).await?;
+    let user: User = service.create_user(&req.name, &req.email).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
 
@@ -63,11 +63,11 @@ pub async fn create_user(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn get_user(
-    State(service): State<Arc<UsersService>>,
+    State(service): State<Arc<UserService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<UserOutput>, ApiError> {
     let user_id = UserId::new(id);
-    let user = service.get_user(&user_id).await?;
+    let user: User = service.get_user(&user_id).await?;
     Ok(GenericApiResponse::success(user.into()))
 }
 
@@ -82,14 +82,14 @@ pub async fn get_user(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
-    State(service): State<Arc<UsersService>>,
+    State(service): State<Arc<UserService>>,
     Query(query): Query<UserQuery>,
 ) -> Result<GenericApiResponse<GenericPagination<UserOutput>>, ApiError> {
     let page = query.page.unwrap_or(1);
     let limit = query.limit.unwrap_or(20);
     let pagination = Pagination { page, limit };
 
-    let users = service.list_users(pagination).await?;
+    let users: Vec<User> = service.list_users(pagination).await?;
     let total = service.count_users().await?;
     let data: Vec<UserOutput> = users.into_iter().map(Into::into).collect();
 
@@ -106,7 +106,7 @@ pub async fn list_users(
 )]
 #[tracing::instrument(skip_all)]
 pub async fn delete_user(
-    State(service): State<Arc<UsersService>>,
+    State(service): State<Arc<UserService>>,
     Path(id): Path<String>,
 ) -> Result<GenericApiResponse<()>, ApiError> {
     let user_id = UserId::new(id);

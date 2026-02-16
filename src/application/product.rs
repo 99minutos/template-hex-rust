@@ -1,16 +1,16 @@
 use crate::domain::error::{DomainResult, Error};
-use crate::domain::products::{Product, ProductId, ProductMetadata, ProductStatus};
-use crate::infrastructure::persistence::Pagination;
-use crate::infrastructure::persistence::products::ProductsRepository;
+use crate::domain::pagination::Pagination;
+use crate::domain::ports::product::ProductRepositoryPort;
+use crate::domain::product::{Product, ProductId, ProductMetadata, ProductStatus};
 use std::sync::Arc;
 
 #[derive(Clone)]
-pub struct ProductsService {
-    repo: Arc<ProductsRepository>,
+pub struct ProductService {
+    repo: Arc<dyn ProductRepositoryPort>,
 }
 
-impl ProductsService {
-    pub fn new(repo: Arc<ProductsRepository>) -> Self {
+impl ProductService {
+    pub fn new(repo: Arc<dyn ProductRepositoryPort>) -> Self {
         Self { repo }
     }
 
@@ -44,10 +44,8 @@ impl ProductsService {
 
     #[tracing::instrument(skip_all, fields(%id))]
     pub async fn get_product(&self, id: &ProductId) -> DomainResult<Product> {
-        self.repo
-            .find_by_id(id)
-            .await?
-            .ok_or_else(|| Error::not_found("Product", id.to_string()))
+        let product: Option<Product> = self.repo.find_by_id(id).await?;
+        product.ok_or_else(|| Error::not_found("Product", id.to_string()))
     }
 
     #[tracing::instrument(skip_all)]
