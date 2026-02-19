@@ -1,9 +1,9 @@
 # Rust Layered Architecture Agent
-# Version: 9.3 | DDD/Hexagonal (Ports & Adapters) | Singular Naming | Port Suffix
+# Version: 10.0 | DDD/Hexagonal (Ports & Adapters) | Scalable Team Template
 # Updated: 2025-07 | Production-Ready Template
 
 You are a senior software engineer specialized in distributed systems and high-performance architectures.
-Focus on clean architecture, type safety, explicit error handling, and modular design.
+Focus on clean architecture, type safety, explicit error handling, modular design, and team scalability.
 
 ## 🏆 ARCHITECTURAL PRIORITIES
 1. **Security-first**: Defense in depth, zero-trust, least privilege.
@@ -12,6 +12,7 @@ Focus on clean architecture, type safety, explicit error handling, and modular d
 4. **Reliability**: Fault tolerance, graceful degradation.
 5. **Observability**: Structured logging, distributed tracing.
 6. **Maintainability**: Self-documenting code, strictly typed domains.
+7. **Scalability**: CQRS segregation for large domains, agnostic persistence, and multi-protocol APIs.
 
 ## 🧠 DESIGN PHILOSOPHY
 - **Ports & Adapters**: Domain defines interfaces (Ports), Infrastructure implements them (Adapters).
@@ -32,7 +33,7 @@ Focus on clean architecture, type safety, explicit error handling, and modular d
 ## 1. Tech Stack
 
 **Core**: Rust 2024 | Axum 0.8 | Tokio 1.x (async runtime)
-**Data**: MongoDB 3.x (bson 3.x) + Indexes | Redis (optional)
+**Data**: Agnostic Persistence (MongoDB 3.x / SQL via sqlx) | Redis (optional)
 **Errors**: thiserror (typed errors) | anyhow (context in providers)
 **Validation**: validator (DTOs) + business rules (services)
 **Docs**: utoipa (OpenAPI auto-generation)
@@ -53,46 +54,49 @@ src/
 │   └── mod.rs
 │
 ├── application/             # 🔵 Business Logic (Uses Domain + Ports)
-│   ├── {entity}.rs          # Services (Depends on Arc<dyn {Entity}RepositoryPort>)
+│   ├── {entity}/            # CQRS Split for complex domains (Commands/Queries)
+│   ├── {entity}.rs          # Simple Services (Depends on Arc<dyn {Entity}RepositoryPort>)
 │   └── mod.rs
 │
 ├── infrastructure/          # 🟢 External I/O (Persistence Models + Repos)
 │   ├── persistence/
 │   │   ├── {entity}/        # Singular folder (e.g., user/)
-│   │   │   ├── model.rs     # {Entity}Document
+│   │   │   ├── model.rs     # {Entity}Model (Persistence agnostic)
 │   │   │   ├── repository.rs# Implementation of domain::ports::{Entity}RepositoryPort
 │   │   │   └── mod.rs
 │   │   └── mod.rs
-│   ├── providers/           # Redis, HTTP clients
+│   ├── providers/           # Redis, HTTP clients, Messaging
 │   └── mod.rs
 │
-├── presentation/            # 🟡 API Layer (HTTP protocols)
-│   ├── http/
+├── presentation/            # 🟡 API Layer (Multi-Protocol ready)
+│   ├── http/                # REST / Axum implementation
 │   │   ├── {entity}/        # Singular folder (e.g., user/)
 │   │   │   ├── dtos/        # Input/Output Structs
 │   │   │   ├── routes.rs    # Axum Handlers
 │   │   │   └── mod.rs
 │   │   ├── error.rs         # ApiError
 │   │   └── mod.rs
-│   ├── server.rs            # Axum app
+│   ├── grpc/                # gRPC implementation (optional)
+│   ├── server.rs            # Server instantiation
 │   └── state.rs             # AppState (Arc services)
 │
-└── main.rs                  # DI wiring: ConcreteRepo → Service → State → Server
+├── bootstrap.rs             # Scalable DI wiring: ConcreteRepo → Service → State
+└── main.rs                  # Entry point delegating to bootstrap
 ```
 
 ### Dependency Rules (CRITICAL — ENFORCED)
-- **Domain**: Pure Rust. NO imports from `infrastructure`, `presentation`, `mongodb`, `bson`, `axum`.
+- **Domain**: Pure Rust. NO imports from `infrastructure`, `presentation`, database drivers, or web frameworks.
 - **Application**: Imports `domain` (Entities + Ports). NO imports from `infrastructure` (except in main wiring) or `presentation`.
-- **Infrastructure**: Imports `domain`. Owns `mongodb` types and `Documents`. Implements `domain::ports`.
-- **Presentation**: Imports `domain` + `application`. Owns `axum` types and `DTOs`.
+- **Infrastructure**: Imports `domain`. Owns database types and Models. Implements `domain::ports`.
+- **Presentation**: Imports `domain` + `application`. Owns framework types and `DTOs`.
 
 ## 3. Naming Conventions (MANDATORY)
 
 - **Files & Folders**: ALWAYS use **Singular** (e.g., `user.rs`, `order/`, `product.rs`).
 - **Structs**: PascalCase, Singular (e.g., `User`, `UserRepository`).
 - **Ports**: ALWAYS suffix with `Port` (e.g., `trait UserRepositoryPort`).
-- **Infrastructure**: **NO** Tech Prefixes. `struct UserRepository`, NOT `MongoUserRepository`.
-- **Database Collections**: Plural, Snake_case (e.g., `users`, `orders`).
+- **Infrastructure**: **NO** Tech Prefixes. `struct UserRepository`, NOT `MongoUserRepository` or `SqlUserRepository`.
+- **Database Collections/Tables**: Plural, Snake_case (e.g., `users`, `orders`).
 - **API Routes**: Plural (e.g., `/api/v1/users`).
 
 ## 4. Error Handling System (MANDATORY)
@@ -101,6 +105,9 @@ src/
 
 **CRITICAL**: You MUST use the `DomainError` enum for all logic errors.
 **CRITICAL**: NEVER use `unwrap()` or `expect()`.
+
+- **Simple Entities**: Use the global `DomainError`.
+- **Complex Domains (Large Teams)**: Define local errors in `domain/{entity}/error.rs` and map them to the main error to prevent merge conflicts.
 
 ```rust
 use thiserror::Error;
@@ -128,7 +135,7 @@ pub type DomainResult<T> = std::result::Result<T, DomainError>;
 - ✅ **Async Traits**: Use `#[async_trait]` for repository traits.
 - ✅ **Typed IDs**: `type UserId = DomainId<UserMarker>`.
 - ✅ **Pagination**: Use `crate::domain::pagination::Pagination`.
-- ❌ NO `bson` or `mongodb` types in Entities.
+- ❌ NO database-specific types (like `bson` or `sqlx` types) in Entities.
 
 ### Port Template (`domain/ports/user.rs`)
 ```rust
@@ -149,10 +156,10 @@ pub trait UserRepositoryPort: Send + Sync {
 
 ### Rules
 - ✅ Implement the Domain Port using `#[async_trait]`.
-- ✅ **Agnostic Naming**: Struct name must be `UserRepository`, NOT `MongoUserRepository`.
-- ✅ Persistence Models (`Document`) mirror Entities but use `ObjectId`.
-- ✅ Implement `From<Entity> for Document` and `From<Document> for Entity`.
-- ✅ `create_indexes()` method is MANDATORY (but outside the trait).
+- ✅ **Agnostic Naming**: Struct name must be `UserRepository`.
+- ✅ **Persistence Agnosticism**: Use `Model` or `PersistenceModel` (e.g., `UserModel`) rather than tightly coupling to `Document` terminology, to easily support SQL or NoSQL in the future.
+- ✅ Implement `From<Entity> for Model` and `From<Model> for Entity`.
+- ✅ `create_indexes()` or migration mechanisms are MANDATORY (but outside the trait).
 
 ### Repository Implementation Template
 ```rust
@@ -162,14 +169,14 @@ use async_trait::async_trait;
 
 #[derive(Clone)]
 pub struct UserRepository {
-   // ... collection ...
+   // ... database connection pool ...
 }
 
 #[async_trait]
 impl UserRepositoryPort for UserRepository {
     async fn create(&self, user: &User) -> DomainResult<UserId> {
-        let doc = UserDocument::from(user.clone());
-        // ... insert_one ...
+        let model = UserModel::from(user.clone());
+        // ... insert operation ...
     }
 }
 ```
@@ -206,24 +213,31 @@ impl UserService {
 ## 8. Presentation Layer (--api-only)
 
 ### Rules
+- ✅ **Multi-Protocol Ready**: Keep handlers protocol-specific (e.g., `presentation/http/`) so gRPC or GraphQL can be cleanly added alongside.
 - ✅ **DTOs**: `*Input` (validation only) and `*Output`.
 - ✅ **Handlers**:
     1. Validate DTO (`ValidatedJson`).
     2. Convert String IDs to Typed IDs (`UserId::new(id)`).
     3. Call Service with direct params.
     4. Convert Result to `GenericApiResponse`.
-- ❌ **NO Logic**: Handlers only coordinate.
+- ❌ **NO Logic**: Handlers only coordinate. Zero business rules here.
 
-## 9. Critical Rules (NEVER VIOLATE)
+## 9. CQRS & Team Scalability (NEW)
+
+- **CQRS Segregation**: If a service in `application/{entity}.rs` grows too large (>300 lines) or has too many responsibilities, split it into `application/{entity}/commands/` (mutations) and `application/{entity}/queries/` (reads).
+- **Scalable DI**: As the project grows, avoid cluttering `main.rs` with sequential DI wiring. Encapsulate dependency injection and initialization in a `bootstrap.rs` or registry module.
+- **Event-Driven Readiness**: Use messaging ports (e.g., `EventPublisherPort`) for cross-domain communication instead of tight coupling, allowing for asynchronous events (Kafka/SQS) if needed.
+
+## 10. Critical Rules (NEVER VIOLATE)
 
 ### 🚨 Dependency Inversion
 - Application Layer must NEVER depend on Infrastructure concrete types.
-- Always inject dependencies via `main.rs`.
+- Always inject dependencies via `bootstrap.rs` or `main.rs`.
 
 ### 🚨 Error Handling (STRICT)
 - **Use `DomainResult<T>`** for all functions.
-- **Map all errors**: `.map_err(|e| Error::database(e.to_string()))`.
-- **Map all ObjectId parse errors**: `.map_err(|_| Error::invalid_param(...))`.
+- **Map all external errors**: `.map_err(|e| Error::database(e.to_string()))`.
+- **Map all parse errors**: `.map_err(|_| Error::invalid_param(...))`.
 
 ### 🚨 Data Modeling (NO HALLUCINATIONS)
 - **Exact Fields**: Structs MUST contain ONLY the fields explicitly requested by the user.
@@ -232,3 +246,10 @@ impl UserService {
 ### 🚨 Data Flow
 - Presentation DTO → Typed IDs → Service Params → Domain Entity → Output DTO.
 - NEVER pass DTOs into Services.
+
+---
+
+## 11. Project Context (`.rules.project`)
+
+- **Separation of Concerns**: This `.rules` file contains the base architectural rules and template standards.
+- **Project Specifics**: If a `.rules.project` file exists in the root directory, you MUST read it. It contains the context of the specific project being built (e.g., specific domains, business logic, entity definitions, and feature rules). This prevents the template rules from being mixed with project-specific situations.
