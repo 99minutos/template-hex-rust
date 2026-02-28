@@ -4,6 +4,7 @@ You are a senior software engineer specialized in distributed systems and high-p
 Focus on clean architecture, type safety, explicit error handling, modular design, and team scalability.
 
 ## 🏆 ARCHITECTURAL PRIORITIES
+
 1. **Security-first**: Defense in depth, zero-trust, least privilege.
 2. **Testability**: Dependency Inversion allows unit testing business logic without DB.
 3. **Performance**: Sub-100ms p99 latency, hot path optimization.
@@ -13,6 +14,7 @@ Focus on clean architecture, type safety, explicit error handling, modular desig
 7. **Scalability**: CQRS segregation for large domains, agnostic persistence, and multi-protocol APIs.
 
 ## 🧠 DESIGN PHILOSOPHY
+
 - **Ports & Adapters**: Domain defines interfaces (Ports), Infrastructure implements them (Adapters).
 - **Strict SOLID**: Especially Single Responsibility and Dependency Inversion.
 - **Singular Naming**: Prefer `user.rs`, `product/` (singular) over plurals for code structures.
@@ -22,6 +24,7 @@ Focus on clean architecture, type safety, explicit error handling, modular desig
 - **Composition over Inheritance**: Small, composable interfaces.
 
 ## 📝 RESPONSE FORMAT
+
 1. **Key architectural decision** (1 line)
 2. **Functional, complete code** (Include explicit types, exhaustive error handling)
 3. **Trade-offs** (Only if technical complexity requires it)
@@ -83,6 +86,7 @@ src/
 ```
 
 ### Dependency Rules (CRITICAL — ENFORCED)
+
 - **Domain**: Pure Rust. NO imports from `infrastructure`, `presentation`, database drivers, or web frameworks.
 - **Application**: Imports `domain` (Entities + Ports). NO imports from `infrastructure` (except in main wiring) or `presentation`.
 - **Infrastructure**: Imports `domain`. Owns database types and Models. Implements `domain::ports`.
@@ -128,6 +132,7 @@ pub type DomainResult<T> = std::result::Result<T, DomainError>;
 ## 5. Domain Layer (--domain-only)
 
 ### Rules
+
 - ✅ **Selective Repositories**: Only define Repositories for **Aggregate Roots**. Not every entity needs one.
 - ✅ **Ports**: Define `trait {Entity}RepositoryPort` in `domain/ports/{entity}.rs`.
 - ✅ **Async Traits**: Use `#[async_trait]` for repository traits.
@@ -136,6 +141,7 @@ pub type DomainResult<T> = std::result::Result<T, DomainError>;
 - ❌ NO database-specific types (like `bson` or `sqlx` types) in Entities.
 
 ### Port Template (`domain/ports/user.rs`)
+
 ```rust
 use crate::domain::error::DomainResult;
 use crate::domain::pagination::Pagination;
@@ -153,6 +159,7 @@ pub trait UserRepositoryPort: Send + Sync {
 ## 6. Infrastructure Layer (--repository-only)
 
 ### Rules
+
 - ✅ Implement the Domain Port using `#[async_trait]`.
 - ✅ **Agnostic Naming**: Struct name must be `UserRepository`.
 - ✅ **Persistence Agnosticism**: Use `Model` or `PersistenceModel` (e.g., `UserModel`) rather than tightly coupling to `Document` terminology, to easily support SQL or NoSQL in the future.
@@ -160,6 +167,7 @@ pub trait UserRepositoryPort: Send + Sync {
 - ✅ `create_indexes()` or migration mechanisms are MANDATORY (but outside the trait).
 
 ### Repository Implementation Template
+
 ```rust
 // infrastructure/persistence/user/repository.rs
 use crate::domain::ports::user::UserRepositoryPort;
@@ -182,12 +190,14 @@ impl UserRepositoryPort for UserRepository {
 ## 7. Application Layer (--service-only)
 
 ### Rules
+
 - ✅ **Dependency Injection**: Services depend on `Arc<dyn {Entity}RepositoryPort>`.
 - ✅ **Direct Parameters**: Services accept `&str`, `&UserId`, etc.
 - ❌ **NO Concrete Repos**: Do not import infrastructure types.
 - ✅ **Instrumentation**: `#[tracing::instrument(skip_all, fields(...))]`.
 
 ### Service Template
+
 ```rust
 // application/user.rs
 use crate::domain::ports::user::UserRepositoryPort;
@@ -211,13 +221,14 @@ impl UserService {
 ## 8. Presentation Layer (--api-only)
 
 ### Rules
+
 - ✅ **Multi-Protocol Ready**: Keep handlers protocol-specific (e.g., `presentation/http/`) so gRPC or GraphQL can be cleanly added alongside.
 - ✅ **DTOs**: `*Input` (validation only) and `*Output`.
 - ✅ **Handlers**:
-    1. Validate DTO (`ValidatedJson`).
-    2. Convert String IDs to Typed IDs (`UserId::new(id)`).
-    3. Call Service with direct params.
-    4. Convert Result to `GenericApiResponse`.
+  1. Validate DTO (`ValidatedJson`).
+  2. Convert String IDs to Typed IDs (`UserId::new(id)`).
+  3. Call Service with direct params.
+  4. Convert Result to `GenericApiResponse`.
 - ❌ **NO Logic**: Handlers only coordinate. Zero business rules here.
 
 ## 9. CQRS & Team Scalability (NEW)
@@ -229,19 +240,23 @@ impl UserService {
 ## 10. Critical Rules (NEVER VIOLATE)
 
 ### 🚨 Dependency Inversion
+
 - Application Layer must NEVER depend on Infrastructure concrete types.
 - Always inject dependencies via `bootstrap.rs` or `main.rs`.
 
 ### 🚨 Error Handling (STRICT)
+
 - **Use `DomainResult<T>`** for all functions.
 - **Map all external errors**: `.map_err(|e| Error::database(e.to_string()))`.
 - **Map all parse errors**: `.map_err(|_| Error::invalid_param(...))`.
 
 ### 🚨 Data Modeling (NO HALLUCINATIONS)
+
 - **Exact Fields**: Structs MUST contain ONLY the fields explicitly requested by the user.
 - **No Speculation**: Do not add extra fields unless specifically asked.
 
 ### 🚨 Data Flow
+
 - Presentation DTO → Typed IDs → Service Params → Domain Entity → Output DTO.
 - NEVER pass DTOs into Services.
 
@@ -249,5 +264,5 @@ impl UserService {
 
 ## 11. Project Context (`.rules.project`)
 
-- **Separation of Concerns**: This `.rules` file contains the base architectural rules and template standards.
+- **Separation of Concerns**: This `AGENTS.md` file contains the base architectural rules and template standards.
 - **Project Specifics**: If a `.rules.project` file exists in the root directory, you MUST read it. It contains the context of the specific project being built (e.g., specific domains, business logic, entity definitions, and feature rules). This prevents the template rules from being mixed with project-specific situations.

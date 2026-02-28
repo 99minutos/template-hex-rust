@@ -5,4 +5,6 @@
 *.md
 !README.md
 !GEMINI.md
-!CLAUDEx3.md
+!CLAUDE.md
+!AGENTS.md
+!AGENT.md
