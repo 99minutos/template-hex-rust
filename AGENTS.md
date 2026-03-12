@@ -255,14 +255,19 @@ impl UserService {
 - **Exact Fields**: Structs MUST contain ONLY the fields explicitly requested by the user.
 - **No Speculation**: Do not add extra fields unless specifically asked.
 
-### 🚨 Data Flow
+### 🚨 Data Flow (Layer Isolation)
 
-- Presentation DTO → Typed IDs → Service Params → Domain Entity → Output DTO.
-- NEVER pass DTOs into Services.
+- The ONLY data types allowed to cross boundaries between layers (`Presentation` ↔ `Application` ↔ `Infrastructure/Repository`) are:
+  - **Primitive types** (`String`, `i32`, `bool`, etc.)
+  - **Chrono types** (`DateTime<Utc>`)
+  - **Pure Domain Entities/Values** (`User`, `UserId`, `DeliveryType`, etc.)
+- **Presentation DTOs** (`*Input`, `*Dto`, `*Response`) must remain STRICTLY isolated within `presentation/`. NEVER pass DTOs into Application Services or Domains.
+- **Repository Models** (`*Document`, `*Model`) must remain STRICTLY isolated within `infrastructure/`. NEVER return Models to Application Services.
+- Flow: Presentation DTO → Typed IDs/Primitives/Pure Domain → Service Params → Pure Domain Result → Presentation Output DTO.
 
 ---
 
-## 11. Project Context (`.rules.project`)
+## 11. Project Context (`PROJECT.md`)
 
 - **Separation of Concerns**: This `AGENTS.md` file contains the base architectural rules and template standards.
-- **Project Specifics**: If a `.rules.project` file exists in the root directory, you MUST read it. It contains the context of the specific project being built (e.g., specific domains, business logic, entity definitions, and feature rules). This prevents the template rules from being mixed with project-specific situations.
+- **Project Specifics**: If a `PROJECT.md` file exists in the root directory, you MUST read it. It contains the context of the specific project being built (e.g., specific domains, business logic, entity definitions, and feature rules). This prevents the template rules from being mixed with project-specific situations.

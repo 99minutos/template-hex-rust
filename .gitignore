@@ -2,9 +2,7 @@
 .env*
 !.env.example
 *.bin
-*.md
 !README.md
 !GEMINI.md
 !CLAUDE.md
 !AGENTS.md
-!AGENT.md
