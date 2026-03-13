@@ -73,6 +73,9 @@ src/
 │   ├── http/                # REST / Axum implementation
 │   │   ├── {entity}/        # Singular folder (e.g., user/)
 │   │   │   ├── dtos/        # Input/Output Structs
+│   │   │   │   ├── input.rs # Aggregates input DTOs
+│   │   │   │   ├── output.rs# Aggregates output DTOs
+│   │   │   │   └── mod.rs   # Aggregates all dtos
 │   │   │   ├── routes.rs    # Axum Handlers
 │   │   │   └── mod.rs
 │   │   ├── error.rs         # ApiError
@@ -223,7 +226,7 @@ impl UserService {
 ### Rules
 
 - ✅ **Multi-Protocol Ready**: Keep handlers protocol-specific (e.g., `presentation/http/`) so gRPC or GraphQL can be cleanly added alongside.
-- ✅ **DTOs**: `*Input` (validation only) and `*Output`.
+- ✅ **DTO Segregation**: HTTP DTOs MUST be strictly segregated into separate files: `input.rs` (for requests, deserialization, and validation only) and `output.rs` (for responses and serialization). NEVER mix input and output models. Suffixes should be `*Input` and `*Output` respectively.
 - ✅ **Handlers**:
   1. Validate DTO (`ValidatedJson`).
   2. Convert String IDs to Typed IDs (`UserId::new(id)`).
