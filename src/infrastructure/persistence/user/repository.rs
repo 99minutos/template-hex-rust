@@ -1,7 +1,7 @@
 use crate::domain::error::{DomainResult, Error};
 use crate::domain::pagination::Pagination;
-use crate::domain::ports::user::UserRepositoryPort;
-use crate::domain::user::{User, UserId};
+use crate::domain::port::user::UserRepositoryPort;
+use crate::domain::entities::user::{User, UserId};
 use crate::infrastructure::persistence::user::model::UserDocument;
 use async_trait::async_trait;
 use futures::stream::TryStreamExt;

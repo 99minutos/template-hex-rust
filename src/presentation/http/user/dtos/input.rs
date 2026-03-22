@@ -1,8 +1,7 @@
 use serde::Deserialize;
-use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Deserialize, ToSchema, Validate)]
+#[derive(Deserialize, Validate)]
 pub struct CreateUserInput {
     #[validate(length(min = 1, message = "Name cannot be empty"))]
     pub name: String,

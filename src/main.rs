@@ -12,7 +12,7 @@ use crate::presentation::state::AppState;
 use std::sync::Arc;
 
 use crate::application::{order::OrderService, product::ProductService, user::UserService};
-use crate::domain::ports::{
+use crate::domain::port::{
     order::OrderRepositoryPort, product::ProductRepositoryPort, user::UserRepositoryPort,
 };
 use crate::infrastructure::persistence::{

@@ -1,6 +1,6 @@
-use crate::domain::order::{Order, OrderId};
-use crate::domain::product::ProductId;
-use crate::domain::user::UserId;
+use crate::domain::entities::order::{Order, OrderId};
+use crate::domain::entities::product::ProductId;
+use crate::domain::entities::user::UserId;
 use mongodb::bson::{self, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 

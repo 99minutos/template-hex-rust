@@ -1,4 +1,3 @@
-use crate::presentation::openapi::ApiDoc;
 use axum::{Router, extract::DefaultBodyLimit};
 use std::net::SocketAddr;
 use tokio::signal;
@@ -8,8 +7,6 @@ use tower_http::{
     decompression::RequestDecompressionLayer,
     trace::TraceLayer,
 };
-use utoipa::OpenApi;
-use utoipa_swagger_ui::SwaggerUi;
 
 use crate::config;
 use crate::presentation::http;
@@ -56,15 +53,8 @@ impl ServerLauncher {
                     .allow_origin(origins)
             };
 
-            let mut router_builder = Router::new().nest("/api/v1", http::app_router());
-
-            if env.app_env != "PRD" {
-                router_builder = router_builder.merge(
-                    SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", ApiDoc::openapi()),
-                );
-            }
-
-            let rest_router = router_builder
+            let rest_router = Router::new()
+                .nest("/api/v1", http::app_router())
                 .layer(TraceLayer::new_for_http())
                 .layer(CompressionLayer::new())
                 .layer(RequestDecompressionLayer::new())
@@ -74,12 +64,6 @@ impl ServerLauncher {
 
             let rest_addr = SocketAddr::from(([0, 0, 0, 0], port));
             tracing::info!("REST Server listening on {}", rest_addr);
-            if env.app_env != "PRD" {
-                tracing::info!(
-                    "Swagger UI available at http://localhost:{}/swagger-ui",
-                    port
-                );
-            }
 
             let listener = tokio::net::TcpListener::bind(rest_addr).await.unwrap();
             axum::serve(listener, rest_router)

@@ -1,8 +1,7 @@
 use serde::Deserialize;
-use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateOrderInput {
     #[validate(length(equal = 24, message = "Invalid User ID format"))]
     pub user_id: String,

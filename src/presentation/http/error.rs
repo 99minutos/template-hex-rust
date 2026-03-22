@@ -5,10 +5,9 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use thiserror::Error;
-use utoipa::ToSchema;
 
 /// Presentation layer error type that bridges Domain errors to HTTP responses.
-#[derive(Debug, Error, ToSchema)]
+#[derive(Debug, Error)]
 pub enum ApiError {
     #[error("Validation failed: {0}")]
     BadRequest(String),

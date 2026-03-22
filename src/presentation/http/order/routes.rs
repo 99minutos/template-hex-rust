@@ -1,8 +1,8 @@
 use crate::application::order::OrderService;
-use crate::domain::order::OrderId;
+use crate::domain::entities::order::OrderId;
 use crate::domain::pagination::Pagination;
-use crate::domain::product::ProductId;
-use crate::domain::user::UserId;
+use crate::domain::entities::product::ProductId;
+use crate::domain::entities::user::UserId;
 use crate::presentation::{
     http::{
         error::ApiError,
@@ -19,10 +19,9 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct OrderQuery {
     #[validate(range(min = 1))]
     pub page: Option<u32>,
@@ -37,15 +36,6 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", get(get_order))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/orders",
-    tag = "Orders",
-    request_body = CreateOrderInput,
-    responses(
-        (status = 200, description = "Order created", body = GenericApiResponse<OrderOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn create_order(
     State(service): State<Arc<OrderService>>,
@@ -59,14 +49,6 @@ pub async fn create_order(
     Ok(GenericApiResponse::success(order.into()))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/orders/{id}",
-    tag = "Orders",
-    responses(
-        (status = 200, description = "Get order", body = GenericApiResponse<OrderOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn get_order(
     State(service): State<Arc<OrderService>>,
@@ -77,15 +59,6 @@ pub async fn get_order(
     Ok(GenericApiResponse::success(order.into()))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/orders",
-    tag = "Orders",
-    params(OrderQuery),
-    responses(
-        (status = 200, description = "List orders", body = GenericApiResponse<Vec<OrderOutput>>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn list_orders(
     State(service): State<Arc<OrderService>>,

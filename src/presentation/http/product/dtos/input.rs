@@ -1,8 +1,7 @@
 use serde::Deserialize;
-use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct CreateProductInput {
     #[validate(length(min = 1, message = "Name cannot be empty"))]
     pub name: String,
@@ -23,7 +22,7 @@ pub struct CreateProductInput {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Debug, Deserialize, Validate, ToSchema)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct UpdateProductMetadataInput {
     pub description: Option<String>,
 

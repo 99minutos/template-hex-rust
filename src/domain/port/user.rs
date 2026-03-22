@@ -1,6 +1,6 @@
 use crate::domain::error::DomainResult;
 use crate::domain::pagination::Pagination;
-use crate::domain::user::{User, UserId};
+use crate::domain::entities::user::{User, UserId};
 use async_trait::async_trait;
 
 /// Repository Interface for User Management.

@@ -1,8 +1,7 @@
-use crate::domain::product::{Product, ProductId};
+use crate::domain::entities::product::{Product, ProductId};
 use serde::Serialize;
-use utoipa::ToSchema;
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
 pub struct ProductOutput {
     pub id: String,
     pub name: String,

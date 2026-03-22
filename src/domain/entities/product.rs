@@ -1,6 +1,5 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use utoipa::ToSchema;
 
 use crate::domain::values;
 
@@ -8,7 +7,7 @@ use crate::domain::values;
 pub struct ProductMarker;
 pub type ProductId = values::DomainId<ProductMarker>;
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ProductStatus {
     #[default]
@@ -18,7 +17,7 @@ pub enum ProductStatus {
     OutOfStock,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Default, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 pub struct ProductMetadata {
     pub description: Option<String>,
     pub category: String,

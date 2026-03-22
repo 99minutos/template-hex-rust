@@ -1,8 +1,8 @@
 use crate::domain::error::{DomainResult, Error};
-use crate::domain::order::{Order, OrderId};
+use crate::domain::entities::order::{Order, OrderId};
 use crate::domain::pagination::Pagination;
-use crate::domain::ports::order::OrderRepositoryPort;
-use crate::domain::user::UserId;
+use crate::domain::port::order::OrderRepositoryPort;
+use crate::domain::entities::user::UserId;
 use crate::infrastructure::persistence::order::model::OrderDocument;
 use async_trait::async_trait;
 use futures::stream::TryStreamExt;

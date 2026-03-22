@@ -81,7 +81,3 @@ async-trait = "0.1"
 # Error Handling
 thiserror = "2"
 anyhow = "1"
-
-# Documentation
-utoipa = { version = "5", features = ["axum_extras"] }
-utoipa-swagger-ui = { version = "9", features = ["axum"] }

@@ -1,7 +1,7 @@
 use crate::domain::error::{DomainResult, Error};
 use crate::domain::pagination::Pagination;
-use crate::domain::ports::product::ProductRepositoryPort;
-use crate::domain::product::{Product, ProductId, ProductMetadata, ProductStatus};
+use crate::domain::port::product::ProductRepositoryPort;
+use crate::domain::entities::product::{Product, ProductId, ProductMetadata, ProductStatus};
 use std::sync::Arc;
 
 #[derive(Clone)]

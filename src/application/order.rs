@@ -1,11 +1,11 @@
 use crate::domain::error::{DomainResult, Error};
-use crate::domain::order::{Order, OrderId};
+use crate::domain::entities::order::{Order, OrderId};
 use crate::domain::pagination::Pagination;
-use crate::domain::ports::order::OrderRepositoryPort;
-use crate::domain::ports::product::ProductRepositoryPort;
-use crate::domain::ports::user::UserRepositoryPort;
-use crate::domain::product::ProductId;
-use crate::domain::user::UserId;
+use crate::domain::port::order::OrderRepositoryPort;
+use crate::domain::port::product::ProductRepositoryPort;
+use crate::domain::port::user::UserRepositoryPort;
+use crate::domain::entities::product::ProductId;
+use crate::domain::entities::user::UserId;
 use std::sync::Arc;
 
 #[derive(Clone)]
@@ -36,7 +36,7 @@ impl OrderService {
         quantity: i32,
     ) -> DomainResult<Order> {
         // 1. Validate user exists
-        let user_opt: Option<crate::domain::user::User> =
+        let user_opt: Option<crate::domain::entities::user::User> =
             self.user_repo.find_by_id(user_id).await?;
         if user_opt.is_none() {
             return Err(Error::not_found("User", user_id.to_string()));
@@ -118,7 +118,7 @@ impl OrderService {
         pagination: Pagination,
     ) -> DomainResult<Vec<Order>> {
         // Validate user exists
-        let user_opt: Option<crate::domain::user::User> =
+        let user_opt: Option<crate::domain::entities::user::User> =
             self.user_repo.find_by_id(user_id).await?;
         if user_opt.is_none() {
             return Err(Error::not_found("User", user_id.to_string()));

@@ -1,7 +1,7 @@
 use crate::domain::error::DomainResult;
-use crate::domain::order::{Order, OrderId};
+use crate::domain::entities::order::{Order, OrderId};
 use crate::domain::pagination::Pagination;
-use crate::domain::user::UserId;
+use crate::domain::entities::user::UserId;
 use async_trait::async_trait;
 
 /// Repository Interface for Order Management.

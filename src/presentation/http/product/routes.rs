@@ -1,6 +1,6 @@
 use crate::application::product::ProductService;
 use crate::domain::pagination::Pagination;
-use crate::domain::product::{ProductId, ProductMetadata};
+use crate::domain::entities::product::{ProductId, ProductMetadata};
 use crate::presentation::{
     http::{
         error::ApiError,
@@ -17,10 +17,9 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct ProductQuery {
     #[validate(range(min = 1))]
     pub page: Option<u32>,
@@ -36,15 +35,6 @@ pub fn router() -> Router<AppState> {
         .route("/{id}/metadata", patch(update_metadata))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/products",
-    tag = "Products",
-    request_body = CreateProductInput,
-    responses(
-        (status = 200, description = "Product created", body = GenericApiResponse<ProductOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn create_product(
     State(service): State<Arc<ProductService>>,
@@ -63,14 +53,6 @@ pub async fn create_product(
     Ok(GenericApiResponse::success(product.into()))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/products/{id}",
-    tag = "Products",
-    responses(
-        (status = 200, description = "Get product", body = GenericApiResponse<ProductOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn get_product(
     State(service): State<Arc<ProductService>>,
@@ -81,15 +63,6 @@ pub async fn get_product(
     Ok(GenericApiResponse::success(product.into()))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/products",
-    tag = "Products",
-    params(ProductQuery),
-    responses(
-        (status = 200, description = "List products", body = GenericApiResponse<Vec<ProductOutput>>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn list_products(
     State(service): State<Arc<ProductService>>,
@@ -105,15 +78,6 @@ pub async fn list_products(
     Ok(GenericApiResponse::success(dtos))
 }
 
-#[utoipa::path(
-    patch,
-    path = "/api/v1/products/{id}/metadata",
-    tag = "Products",
-    request_body = UpdateProductMetadataInput,
-    responses(
-        (status = 200, description = "Metadata updated", body = GenericApiResponse<ProductOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn update_metadata(
     State(service): State<Arc<ProductService>>,
@@ -132,14 +96,6 @@ pub async fn update_metadata(
     Ok(GenericApiResponse::success(product.into()))
 }
 
-#[utoipa::path(
-    delete,
-    path = "/api/v1/products/{id}",
-    tag = "Products",
-    responses(
-        (status = 200, description = "Delete product")
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn delete_product(
     State(service): State<Arc<ProductService>>,

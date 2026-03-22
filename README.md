@@ -2,7 +2,7 @@
 
 Production-ready Rust microservice template — **DDD/Hexagonal Architecture** (Ports & Adapters), strict layer isolation, type-safe domain IDs, distributed tracing, and auto-generated OpenAPI docs.
 
-**Stack**: Rust 2024 · Axum 0.8 · MongoDB 3.x · Tokio · OpenTelemetry · Stackdriver · utoipa (Swagger)
+
 
 ---
 
@@ -44,7 +44,7 @@ cp .env.example .env           # fill in MONGO_URL, MONGO_DB, SERVICE_NAME, PROJ
 
 # Run
 cargo run                      # http://localhost:3000
-                               # Swagger UI → http://localhost:3000/swagger-ui (non-PRD only)
+
 ```
 
 After cloning, remove the example entities included in the template and start fresh with your own domain following the guide below.
@@ -147,7 +147,7 @@ src/
 │   │   └── mod.rs                   #   app_router() — nests entity routes
 │   ├── server.rs                    #   Axum server + graceful shutdown
 │   ├── state.rs                     #   AppState + FromRef
-│   └── openapi.rs                   #   utoipa OpenAPI registry
+
 │
 ├── config.rs                        #   Env loading (dotenvy + OnceLock)
 └── main.rs                          #   DI wiring: Repo → Service → State → Server
@@ -480,10 +480,10 @@ impl {Entity}Service {
 
 ```rust
 use serde::Deserialize;
-use utoipa::ToSchema;
+
 use validator::Validate;
 
-#[derive(Deserialize, ToSchema, Validate)]
+
 pub struct Create{Entity}Input {
     #[validate(length(min = 1, message = "field cannot be empty"))]
     pub some_field: String,
@@ -495,10 +495,10 @@ pub struct Create{Entity}Input {
 
 ```rust
 use serde::Serialize;
-use utoipa::ToSchema;
+
 use crate::domain::{entity}::{Entity};
 
-#[derive(Serialize, ToSchema)]
+
 pub struct {Entity}Output {
     pub id: String,
     // ... fields to expose ...
@@ -553,7 +553,7 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", get(get_by_id).delete(delete))
 }
 
-#[utoipa::path(post, path = "/api/v1/{entities}", tag = "{Entities}", request_body = Create{Entity}Input,
+
     responses((status = 200, body = GenericApiResponse<{Entity}Output>)))]
 #[tracing::instrument(skip_all)]
 async fn create(
@@ -564,7 +564,7 @@ async fn create(
     Ok(GenericApiResponse::success(entity.into()))
 }
 
-#[utoipa::path(get, path = "/api/v1/{entities}/{id}", tag = "{Entities}",
+
     responses((status = 200, body = GenericApiResponse<{Entity}Output>)))]
 #[tracing::instrument(skip_all)]
 async fn get_by_id(
@@ -898,7 +898,7 @@ async fn test_create() {
 | `MONGO_URL`      | ✅       | —                        | MongoDB connection string                    |
 | `MONGO_DB`       | ✅       | —                        | Database name                                |
 | `PORT`           | ❌       | `3000`                   | HTTP listen port                             |
-| `APP_ENV`        | ❌       | `DEV`                    | `DEV` / `STG` / `PRD` — controls Swagger UI  |
+
 | `REDIS_URL`      | ❌       | `redis://127.0.0.1:6379` | Redis connection string                      |
 | `DEBUG_LEVEL`    | ❌       | `info`                   | Log level (`debug`, `info`, `warn`, `error`) |
 | `STORAGE_BUCKET` | ❌       | —                        | GCS bucket name                              |
@@ -908,11 +908,11 @@ async fn test_create() {
 
 ## API Documentation
 
-Swagger UI auto-generated at **`http://localhost:{PORT}/swagger-ui`**.
+
 
 > Disabled when `APP_ENV=PRD`.
 
-Annotate handlers with `#[utoipa::path(...)]` and register in `src/presentation/openapi.rs`.
+
 
 ---
 

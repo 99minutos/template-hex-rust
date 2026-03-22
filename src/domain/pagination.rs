@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 /// Pagination parameters for repository queries.
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, utoipa::IntoParams)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct Pagination {
     /// Page number (1-indexed)
     pub page: u32,

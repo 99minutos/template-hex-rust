@@ -1,8 +1,7 @@
-use crate::domain::order::{Order, OrderId};
+use crate::domain::entities::order::{Order, OrderId};
 use serde::Serialize;
-use utoipa::ToSchema;
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
 pub struct OrderOutput {
     pub id: String,
     pub user_id: String,

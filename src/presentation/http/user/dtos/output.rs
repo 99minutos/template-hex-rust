@@ -1,8 +1,7 @@
-use crate::domain::user::{User, UserId};
+use crate::domain::entities::user::{User, UserId};
 use serde::Serialize;
-use utoipa::ToSchema;
 
-#[derive(Serialize, ToSchema)]
+#[derive(Serialize)]
 pub struct UserOutput {
     pub id: String,
     pub name: String,

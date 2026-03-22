@@ -1,6 +1,6 @@
 use crate::domain::error::DomainResult;
 use crate::domain::pagination::Pagination;
-use crate::domain::product::{Product, ProductId, ProductMetadata};
+use crate::domain::entities::product::{Product, ProductId, ProductMetadata};
 use async_trait::async_trait;
 
 /// Repository Interface for Product Management.

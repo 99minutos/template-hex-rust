@@ -1,4 +1,4 @@
-use crate::domain::user::{User, UserId};
+use crate::domain::entities::user::{User, UserId};
 use bson::oid::ObjectId;
 use serde::{Deserialize, Serialize};
 

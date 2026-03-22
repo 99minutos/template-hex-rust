@@ -1,6 +1,6 @@
 use crate::application::user::UserService;
 use crate::domain::pagination::Pagination;
-use crate::domain::user::{User, UserId};
+use crate::domain::entities::user::{User, UserId};
 use crate::presentation::{
     http::{
         error::ApiError,
@@ -17,10 +17,9 @@ use axum::{
 };
 use serde::Deserialize;
 use std::sync::Arc;
-use utoipa::{IntoParams, ToSchema};
 use validator::Validate;
 
-#[derive(Debug, Deserialize, Validate, ToSchema, IntoParams)]
+#[derive(Debug, Deserialize, Validate)]
 pub struct UserQuery {
     #[validate(range(min = 1))]
     pub page: Option<u32>,
@@ -35,15 +34,6 @@ pub fn router() -> Router<AppState> {
         .route("/{id}", get(get_user).delete(delete_user))
 }
 
-#[utoipa::path(
-    post,
-    path = "/api/v1/users",
-    tag = "Users",
-    request_body = CreateUserInput,
-    responses(
-        (status = 200, description = "User created", body = GenericApiResponse<UserOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn create_user(
     State(service): State<Arc<UserService>>,
@@ -53,14 +43,6 @@ pub async fn create_user(
     Ok(GenericApiResponse::success(user.into()))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/users/{id}",
-    tag = "Users",
-    responses(
-        (status = 200, description = "Get user", body = GenericApiResponse<UserOutput>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn get_user(
     State(service): State<Arc<UserService>>,
@@ -71,15 +53,6 @@ pub async fn get_user(
     Ok(GenericApiResponse::success(user.into()))
 }
 
-#[utoipa::path(
-    get,
-    path = "/api/v1/users",
-    tag = "Users",
-    params(UserQuery),
-    responses(
-        (status = 200, description = "List users (paginated)", body = GenericApiResponse<GenericPagination<UserOutput>>)
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn list_users(
     State(service): State<Arc<UserService>>,
@@ -96,14 +69,6 @@ pub async fn list_users(
     Ok(GenericApiResponse::paginated(data, total, page, limit))
 }
 
-#[utoipa::path(
-    delete,
-    path = "/api/v1/users/{id}",
-    tag = "Users",
-    responses(
-        (status = 200, description = "Delete user")
-    )
-)]
 #[tracing::instrument(skip_all)]
 pub async fn delete_user(
     State(service): State<Arc<UserService>>,

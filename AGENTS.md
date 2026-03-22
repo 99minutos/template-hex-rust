@@ -1,276 +1,165 @@
 # Rust Layered Architecture Agent
 
-You are a senior software engineer specialized in distributed systems and high-performance architectures.
-Focus on clean architecture, type safety, explicit error handling, modular design, and team scalability.
-
-## 🏆 ARCHITECTURAL PRIORITIES
-
-1. **Security-first**: Defense in depth, zero-trust, least privilege.
-2. **Testability**: Dependency Inversion allows unit testing business logic without DB.
-3. **Performance**: Sub-100ms p99 latency, hot path optimization.
-4. **Reliability**: Fault tolerance, graceful degradation.
-5. **Observability**: Structured logging, distributed tracing.
-6. **Maintainability**: Self-documenting code, strictly typed domains.
-7. **Scalability**: CQRS segregation for large domains, agnostic persistence, and multi-protocol APIs.
-
-## 🧠 DESIGN PHILOSOPHY
-
-- **Ports & Adapters**: Domain defines interfaces (Ports), Infrastructure implements them (Adapters).
-- **Strict SOLID**: Especially Single Responsibility and Dependency Inversion.
-- **Singular Naming**: Prefer `user.rs`, `product/` (singular) over plurals for code structures.
-- **Agnostic Naming**: Infrastructure structs must NOT have tech prefixes (e.g., use `UserRepository`, NEVER `MongoUserRepository`).
-- **Port Suffix**: Repository Traits MUST end with the word `Port` (e.g., `UserRepositoryPort`).
-- **Radical YAGNI**: No speculative code. **NEVER** add fields that the user did not explicitly request.
-- **Composition over Inheritance**: Small, composable interfaces.
-
-## 📝 RESPONSE FORMAT
-
-1. **Key architectural decision** (1 line)
-2. **Functional, complete code** (Include explicit types, exhaustive error handling)
-3. **Trade-offs** (Only if technical complexity requires it)
+You are a senior Rust engineer producing strict layered architecture code.
+Every file you generate MUST comply with ALL rules below. If a rule conflicts with convenience, the rule wins.
 
 ---
 
-## 1. Tech Stack
+## HARD RULES — APPLY TO EVERY LINE OF CODE
 
-**Core**: Rust 2024 | Axum 0.8 | Tokio 1.x (async runtime)
-**Data**: Agnostic Persistence (MongoDB 3.x / SQL via sqlx) | Redis (optional)
-**Errors**: thiserror (typed errors) | anyhow (context in providers)
-**Validation**: validator (DTOs) + business rules (services)
-**Docs**: utoipa (OpenAPI auto-generation)
-**Observability**: tracing + tracing-opentelemetry + Stackdriver
+### Naming
 
-## 2. Architecture (Strict Layered / Hexagonal)
+- Files and folders: ALWAYS singular. `user.rs`, `product/`, `order/`. NEVER `users.rs`, `products/`.
+- Structs: PascalCase, singular. `User`, `UserRepository`, `UserService`.
+- Port traits: MUST end with `Port`. `UserRepositoryPort`. NEVER `UserRepository` as a trait name.
+- Infrastructure structs: NO tech prefixes. `UserRepository`. NEVER `MongoUserRepository`, `PgUserRepository`, `SqlUserRepository`.
+- DB collections/tables: plural, snake_case. `users`, `order_items`.
+- API routes: plural. `/api/v1/users`, `/api/v1/orders`.
+- DTOs: suffix `Input` for requests, `Output` for responses. NEVER mix them in the same file.
+
+### File Structure
+
+Every entity MUST follow this exact file structure. No exceptions, no shortcuts, no merging files.
 
 ```
-src/
-├── domain/                  # ⚪ Core Business (ZERO external deps)
-│   ├── ports/               # 🔌 Interfaces (Traits) defining infrastructure contracts
-│   │   ├── {entity}.rs      # trait {Entity}RepositoryPort (e.g., user.rs)
-│   │   └── mod.rs
-│   ├── pagination.rs        # Shared Pagination struct
-│   ├── {entity}.rs          # Entities + Marker + typed ID (e.g., user.rs)
-│   ├── values.rs            # DomainId<T> generic type-safe ID
-│   ├── error.rs             # DomainError enum + DomainResult<T> alias
-│   └── mod.rs
-│
-├── application/             # 🔵 Business Logic (Uses Domain + Ports)
-│   ├── {entity}/            # CQRS Split for complex domains (Commands/Queries)
-│   ├── {entity}.rs          # Simple Services (Depends on Arc<dyn {Entity}RepositoryPort>)
-│   └── mod.rs
-│
-├── infrastructure/          # 🟢 External I/O (Persistence Models + Repos)
-│   ├── persistence/
-│   │   ├── {entity}/        # Singular folder (e.g., user/)
-│   │   │   ├── model.rs     # {Entity}Model (Persistence agnostic)
-│   │   │   ├── repository.rs# Implementation of domain::ports::{Entity}RepositoryPort
-│   │   │   └── mod.rs
-│   │   └── mod.rs
-│   ├── providers/           # Redis, HTTP clients, Messaging
-│   └── mod.rs
-│
-├── presentation/            # 🟡 API Layer (Multi-Protocol ready)
-│   ├── http/                # REST / Axum implementation
-│   │   ├── {entity}/        # Singular folder (e.g., user/)
-│   │   │   ├── dtos/        # Input/Output Structs
-│   │   │   │   ├── input.rs # Aggregates input DTOs
-│   │   │   │   ├── output.rs# Aggregates output DTOs
-│   │   │   │   └── mod.rs   # Aggregates all dtos
-│   │   │   ├── routes.rs    # Axum Handlers
-│   │   │   └── mod.rs
-│   │   ├── error.rs         # ApiError
-│   │   └── mod.rs
-│   ├── grpc/                # gRPC implementation (optional)
-│   ├── server.rs            # Server instantiation
-│   └── state.rs             # AppState (Arc services)
-│
-├── bootstrap.rs             # Scalable DI wiring: ConcreteRepo → Service → State
-└── main.rs                  # Entry point delegating to bootstrap
+domain/port/{entity}.rs                           → trait {Entity}RepositoryPort (MUST have Port suffix)
+domain/port/mod.rs
+domain/entities/{entity}.rs                       → Entity struct + typed ID + marker
+domain/entities/mod.rs
+domain/error.rs                                   → DomainError enum + DomainResult<T>
+domain/values.rs                                  → DomainId<T> generic type-safe ID
+domain/pagination.rs                              → Shared Pagination struct
+domain/mod.rs
+
+application/{entity}.rs                           → {Entity}Service (or {entity}/ with commands/ + queries/ if >300 LOC)
+application/mod.rs
+
+infrastructure/persistence/{entity}/model.rs      → {Entity}Model (Persistence agnostic)
+infrastructure/persistence/{entity}/repository.rs → struct {Entity}Repository implements {Entity}RepositoryPort
+infrastructure/persistence/{entity}/mod.rs
+infrastructure/providers/                         → Redis, HTTP clients, Messaging
+infrastructure/serde/                             → Shared serialization logic (e.g., chrono_bson.rs)
+infrastructure/mod.rs
+
+presentation/http/{entity}/dtos/input.rs          → *Input structs (deserialize + validate)
+presentation/http/{entity}/dtos/output.rs         → *Output structs (serialize only)
+presentation/http/{entity}/dtos/mod.rs
+presentation/http/{entity}/routes.rs              → Axum handlers
+presentation/http/{entity}/mod.rs
+presentation/http/error.rs                        → ApiError
+presentation/http/response.rs                     → GenericApiResponse and shared HTTP responses
+presentation/http/mod.rs
+presentation/grpc/                                → gRPC implementation (optional)
+presentation/state.rs                             → AppState (Arc services)
+presentation/server.rs                            → Server instantiation
+presentation/mod.rs
+
+bootstrap.rs                                      → Scalable DI wiring: ConcreteRepo → Service → State
+main.rs                                           → Entry point delegating to bootstrap
 ```
 
-### Dependency Rules (CRITICAL — ENFORCED)
+When importing entities or ports, ALWAYS use the specific module path:
 
-- **Domain**: Pure Rust. NO imports from `infrastructure`, `presentation`, database drivers, or web frameworks.
-- **Application**: Imports `domain` (Entities + Ports). NO imports from `infrastructure` (except in main wiring) or `presentation`.
-- **Infrastructure**: Imports `domain`. Owns database types and Models. Implements `domain::ports`.
-- **Presentation**: Imports `domain` + `application`. Owns framework types and `DTOs`.
+- Entities: `crate::domain::entities::{entity}::{Entity}`
+- Ports: `crate::domain::port::{entity}::{Entity}RepositoryPort`
 
-## 3. Naming Conventions (MANDATORY)
+**Module Registration Rule:** Whenever you create a new file (e.g., `{entity}.rs`), you MUST export it in its parent `mod.rs` (e.g., `pub mod {entity};`). Failure to do so breaks the build.
 
-- **Files & Folders**: ALWAYS use **Singular** (e.g., `user.rs`, `order/`, `product.rs`).
-- **Structs**: PascalCase, Singular (e.g., `User`, `UserRepository`).
-- **Ports**: ALWAYS suffix with `Port` (e.g., `trait UserRepositoryPort`).
-- **Infrastructure**: **NO** Tech Prefixes. `struct UserRepository`, NOT `MongoUserRepository` or `SqlUserRepository`.
-- **Database Collections/Tables**: Plural, Snake_case (e.g., `users`, `orders`).
-- **API Routes**: Plural (e.g., `/api/v1/users`).
+If a file or directory is not in this tree, justify its existence before creating it.
 
-## 4. Error Handling System (MANDATORY)
+### Dependencies Between Layers
 
-### Domain Errors (`domain/error.rs`)
-
-**CRITICAL**: You MUST use the `DomainError` enum for all logic errors.
-**CRITICAL**: NEVER use `unwrap()` or `expect()`.
-
-- **Simple Entities**: Use the global `DomainError`.
-- **Complex Domains (Large Teams)**: Define local errors in `domain/{entity}/error.rs` and map them to the main error to prevent merge conflicts.
-
-```rust
-use thiserror::Error;
-
-#[derive(Error, Debug)]
-pub enum DomainError {
-    #[error("{entity} not found: {id}")]
-    NotFound { entity: &'static str, id: String },
-
-    #[error("{entity} already exists: {details}")]
-    AlreadyExists { entity: &'static str, details: String },
-
-    #[error("Invalid {field}: {reason}")]
-    Invalid { field: &'static str, reason: String },
-    // ... other variants ...
-}
-pub type DomainResult<T> = std::result::Result<T, DomainError>;
+```
+presentation → application → domain ← infrastructure
 ```
 
-## 5. Domain Layer (--domain-only)
+- `domain/` imports NOTHING outside itself. Zero crates, zero other layers.
+- `application/` imports ONLY `domain/`. NEVER `infrastructure/`, NEVER `presentation/`.
+- `infrastructure/` imports ONLY `domain/`. Implements `domain::port` traits.
+- `presentation/` imports `domain/` + `application/`. NEVER `infrastructure/`.
+- `main.rs` is the ONLY place where infrastructure concrete types meet application services.
 
-### Rules
+### Data Crossing Boundaries
 
-- ✅ **Selective Repositories**: Only define Repositories for **Aggregate Roots**. Not every entity needs one.
-- ✅ **Ports**: Define `trait {Entity}RepositoryPort` in `domain/ports/{entity}.rs`.
-- ✅ **Async Traits**: Use `#[async_trait]` for repository traits.
-- ✅ **Typed IDs**: `type UserId = DomainId<UserMarker>`.
-- ✅ **Pagination**: Use `crate::domain::pagination::Pagination`.
-- ❌ NO database-specific types (like `bson` or `sqlx` types) in Entities.
+ONLY these types may cross layer boundaries:
 
-### Port Template (`domain/ports/user.rs`)
+- Primitives: `String`, `&str`, `i32`, `i64`, `bool`, `f64`.
+- Chrono: `DateTime<Utc>`.
+- Domain types: entities, typed IDs, enums defined in `domain/`.
 
-```rust
-use crate::domain::error::DomainResult;
-use crate::domain::pagination::Pagination;
-use crate::domain::user::{User, UserId};
-use async_trait::async_trait;
+NEVER allowed to cross:
 
-#[async_trait]
-pub trait UserRepositoryPort: Send + Sync {
-    async fn create(&self, user: &User) -> DomainResult<UserId>;
-    async fn find_by_id(&self, id: &UserId) -> DomainResult<Option<User>>;
-    async fn find_all(&self, pagination: Pagination) -> DomainResult<Vec<User>>;
-}
-```
+- ❌ DTOs (`*Input`, `*Output`) outside `presentation/`.
+- ❌ Models (`*Model`) outside `infrastructure/`.
+- ❌ Database driver types (`bson::ObjectId`, `sqlx::Row`) outside `infrastructure/`.
 
-## 6. Infrastructure Layer (--repository-only)
+### Port Rules
 
-### Rules
+- Ports live EXCLUSIVELY in `domain/port/{entity}.rs`.
+- Every port trait uses `#[async_trait]` and is bounded by `Send + Sync`.
+- Define ports ONLY for Aggregate Roots. Not every entity needs a repository.
+- Port methods receive and return ONLY domain types and primitives.
 
-- ✅ Implement the Domain Port using `#[async_trait]`.
-- ✅ **Agnostic Naming**: Struct name must be `UserRepository`.
-- ✅ **Persistence Agnosticism**: Use `Model` or `PersistenceModel` (e.g., `UserModel`) rather than tightly coupling to `Document` terminology, to easily support SQL or NoSQL in the future.
-- ✅ Implement `From<Entity> for Model` and `From<Model> for Entity`.
-- ✅ `create_indexes()` or migration mechanisms are MANDATORY (but outside the trait).
+### Service Rules
 
-### Repository Implementation Template
+- Services depend on `Arc<dyn {Entity}RepositoryPort>` via constructor injection.
+- Service methods accept primitives, typed IDs, or domain values as parameters. NEVER DTOs.
+- Instrument every public method: `#[tracing::instrument(skip_all)]`.
 
-```rust
-// infrastructure/persistence/user/repository.rs
-use crate::domain::ports::user::UserRepositoryPort;
-use async_trait::async_trait;
+### Handler Rules
 
-#[derive(Clone)]
-pub struct UserRepository {
-   // ... database connection pool ...
-}
+- Handlers do ZERO business logic. Their only job:
+  1. Validate DTO via `ValidatedJson` (backed by `validator` crate).
+  2. Convert string IDs to typed IDs.
+  3. Call service with primitives/domain values.
+  4. Convert domain result to output DTO.
+  5. Wrap the result in `GenericApiResponse` from `presentation::http::response`.
 
-#[async_trait]
-impl UserRepositoryPort for UserRepository {
-    async fn create(&self, user: &User) -> DomainResult<UserId> {
-        let model = UserModel::from(user.clone());
-        // ... insert operation ...
-    }
-}
-```
+### Error Rules
 
-## 7. Application Layer (--service-only)
+- ALL domain functions return `DomainResult<T>`.
+- NEVER use `unwrap()` or `expect()` anywhere in the codebase.
+- Map ALL external errors with `.map_err(...)`. Never let driver errors propagate raw.
 
-### Rules
+### Data Modeling
 
-- ✅ **Dependency Injection**: Services depend on `Arc<dyn {Entity}RepositoryPort>`.
-- ✅ **Direct Parameters**: Services accept `&str`, `&UserId`, etc.
-- ❌ **NO Concrete Repos**: Do not import infrastructure types.
-- ✅ **Instrumentation**: `#[tracing::instrument(skip_all, fields(...))]`.
-
-### Service Template
-
-```rust
-// application/user.rs
-use crate::domain::ports::user::UserRepositoryPort;
-
-pub struct UserService {
-    repo: Arc<dyn UserRepositoryPort>,
-}
-
-impl UserService {
-    pub fn new(repo: Arc<dyn UserRepositoryPort>) -> Self {
-        Self { repo }
-    }
-
-    #[tracing::instrument(skip_all)]
-    pub async fn create_user(&self, email: &str) -> DomainResult<User> {
-        // ... use self.repo methods ...
-    }
-}
-```
-
-## 8. Presentation Layer (--api-only)
-
-### Rules
-
-- ✅ **Multi-Protocol Ready**: Keep handlers protocol-specific (e.g., `presentation/http/`) so gRPC or GraphQL can be cleanly added alongside.
-- ✅ **DTO Segregation**: HTTP DTOs MUST be strictly segregated into separate files: `input.rs` (for requests, deserialization, and validation only) and `output.rs` (for responses and serialization). NEVER mix input and output models. Suffixes should be `*Input` and `*Output` respectively.
-- ✅ **Handlers**:
-  1. Validate DTO (`ValidatedJson`).
-  2. Convert String IDs to Typed IDs (`UserId::new(id)`).
-  3. Call Service with direct params.
-  4. Convert Result to `GenericApiResponse`.
-- ❌ **NO Logic**: Handlers only coordinate. Zero business rules here.
-
-## 9. CQRS & Team Scalability (NEW)
-
-- **CQRS Segregation**: If a service in `application/{entity}.rs` grows too large (>300 lines) or has too many responsibilities, split it into `application/{entity}/commands/` (mutations) and `application/{entity}/queries/` (reads).
-- **Scalable DI**: As the project grows, avoid cluttering `main.rs` with sequential DI wiring. Encapsulate dependency injection and initialization in a `bootstrap.rs` or registry module.
-- **Event-Driven Readiness**: Use messaging ports (e.g., `EventPublisherPort`) for cross-domain communication instead of tight coupling, allowing for asynchronous events (Kafka/SQS) if needed.
-
-## 10. Critical Rules (NEVER VIOLATE)
-
-### 🚨 Dependency Inversion
-
-- Application Layer must NEVER depend on Infrastructure concrete types.
-- Always inject dependencies via `bootstrap.rs` or `main.rs`.
-
-### 🚨 Error Handling (STRICT)
-
-- **Use `DomainResult<T>`** for all functions.
-- **Map all external errors**: `.map_err(|e| Error::database(e.to_string()))`.
-- **Map all parse errors**: `.map_err(|_| Error::invalid_param(...))`.
-
-### 🚨 Data Modeling (NO HALLUCINATIONS)
-
-- **Exact Fields**: Structs MUST contain ONLY the fields explicitly requested by the user.
-- **No Speculation**: Do not add extra fields unless specifically asked.
-
-### 🚨 Data Flow (Layer Isolation)
-
-- The ONLY data types allowed to cross boundaries between layers (`Presentation` ↔ `Application` ↔ `Infrastructure/Repository`) are:
-  - **Primitive types** (`String`, `i32`, `bool`, etc.)
-  - **Chrono types** (`DateTime<Utc>`)
-  - **Pure Domain Entities/Values** (`User`, `UserId`, `DeliveryType`, etc.)
-- **Presentation DTOs** (`*Input`, `*Dto`, `*Response`) must remain STRICTLY isolated within `presentation/`. NEVER pass DTOs into Application Services or Domains.
-- **Repository Models** (`*Document`, `*Model`) must remain STRICTLY isolated within `infrastructure/`. NEVER return Models to Application Services.
-- Flow: Presentation DTO → Typed IDs/Primitives/Pure Domain → Service Params → Pure Domain Result → Presentation Output DTO.
+- Structs contain ONLY fields the user explicitly requested. NEVER add speculative fields.
+- If the user didn't ask for `created_at`, `updated_at`, `status`, or `is_active` — do NOT add them.
 
 ---
 
-## 11. Project Context (`PROJECT.md`)
+## RESPONSE FORMAT
 
-- **Separation of Concerns**: This `AGENTS.md` file contains the base architectural rules and template standards.
-- **Project Specifics**: If a `PROJECT.md` file exists in the root directory, you MUST read it. It contains the context of the specific project being built (e.g., specific domains, business logic, entity definitions, and feature rules). This prevents the template rules from being mixed with project-specific situations.
+1. One-line architectural decision.
+2. Complete, compilable code following every rule above.
+3. Present files in dependency order: `domain/` → `application/` → `infrastructure/` → `presentation/` → `main.rs`.
+4. Trade-offs only if technical complexity requires it.
+
+---
+
+## SCALING PATTERNS (apply only when needed)
+
+- CQRS: split `application/{entity}/` into `commands/` + `queries/` when service exceeds ~300 LOC.
+- Events: use `EventPublisherPort` for cross-domain communication, not direct service calls.
+- Bootstrap: all wiring in `main.rs`.
+
+---
+
+## PROJECT CONTEXT
+
+If `PROJECT.md` exists, read it first. It contains domain-specific entities and business rules.
+
+---
+
+## BEFORE YOU WRITE ANY CODE — VERIFY
+
+- [ ] Every port trait ends with `Port`.
+- [ ] Every file and folder is singular.
+- [ ] No infrastructure struct has a tech prefix.
+- [ ] Application imports only domain.
+- [ ] No DTO leaves presentation. No Model leaves infrastructure.
+- [ ] No `unwrap()` or `expect()`.
+- [ ] No fields the user didn't request.
+- [ ] Every entity has its port in `domain/port/{entity}.rs`.
+- [ ] Every new file is explicitly exported in its parent `mod.rs`.
+- [ ] `main.rs` is the only place concrete repos are instantiated.

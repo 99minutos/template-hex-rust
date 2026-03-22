@@ -1,4 +1,4 @@
-use crate::domain::product::{Product, ProductId, ProductMetadata, ProductStatus};
+use crate::domain::entities::product::{Product, ProductId, ProductMetadata, ProductStatus};
 use mongodb::bson::{self, oid::ObjectId};
 use serde::{Deserialize, Serialize};
 

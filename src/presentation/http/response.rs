@@ -6,9 +6,8 @@ use axum::{
 use opentelemetry::trace::TraceContextExt;
 use serde::Serialize;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
-use utoipa::ToSchema;
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct GenericPagination<T> {
     pub data: Vec<T>,
     pub total: u64,
@@ -16,20 +15,17 @@ pub struct GenericPagination<T> {
     pub limit: u32,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
+#[derive(Debug, Serialize)]
 pub struct GenericApiResponse<T> {
-    #[schema(example = "0af7651916cd43dd8448eb211c80319c")]
     pub trace_id: String,
 
     #[serde(skip_serializing_if = "Option::is_none")]
     pub data: Option<T>,
 
     #[serde(skip_serializing_if = "Option::is_none")]
-    #[schema(example = "Something went wrong")]
     pub cause: Option<String>,
 
     #[serde(skip)]
-    #[schema(value_type = u16, example = 200)]
     pub status: StatusCode,
 }
 
